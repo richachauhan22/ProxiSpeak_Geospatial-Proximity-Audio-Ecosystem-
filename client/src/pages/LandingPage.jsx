@@ -13,23 +13,10 @@ const FEATURES = [
   },
   {
     number: '03',
-    title: 'Spatial voice, next',
-    copy: 'Proximity-based voice is on the roadmap. Week 1 focuses on the interactive office and presence.',
+    title: 'Spatial proximity audio',
+    copy: 'Conversations fade in and connect naturally as you walk toward teammates and step into their active discussion zone.',
     color: 'emerald',
   },
-];
-
-const WEEK_ONE_MODULES = [
-  ['1', 'Landing page', 'Logo, hero, feature overview, navigation, and office entry.', 'Complete'],
-  ['2', 'Join office', 'Name and office validation, avatar selection and preview, loading and server errors.', 'Complete'],
-  ['3', 'Virtual office canvas', 'Canvas floor, desks, chairs, partitions, and participant avatars; meeting-room tables are not drawn yet.', 'Partial'],
-  ['4', 'Avatar movement', 'WASD and arrow keys, click-to-move, smooth local movement, bounds, and furniture collisions.', 'Complete'],
-  ['5', 'Multiplayer sync', 'Real Socket.io join, presence, leave, and throttled avatar movement updates.', 'Complete'],
-  ['6', 'Participant sidebar', 'Live names, avatar colors, online state, current-user highlight, and participant count.', 'Complete'],
-  ['7', 'Connection status', 'Connecting, connected, reconnecting, disconnected, and actionable error states.', 'Complete'],
-  ['8', 'Office controls', 'Leave office, movement help, and functional zoom controls.', 'Complete'],
-  ['9', 'Responsive UI', 'Desktop workspace, compact tablet layout, and collapsible mobile participant panel.', 'Complete'],
-  ['10', 'Backend integration', 'Uses the existing Node.js Socket.io contract. MongoDB persistence depends on the backend database being available.', 'Partial'],
 ];
 
 export default function LandingPage({ onEnter, onExplore, onDirectOffice }) {
@@ -43,7 +30,6 @@ export default function LandingPage({ onEnter, onExplore, onDirectOffice }) {
         <nav aria-label="Main navigation">
           <a href="#features">Features</a>
           <a href="#how-it-works">How it works</a>
-          <a href="#week-one-modules">Week 1 modules</a>
         </nav>
         <button type="button" className="landing-nav-cta" onClick={onEnter}>Enter office <span aria-hidden="true">↗</span></button>
       </header>
@@ -53,12 +39,12 @@ export default function LandingPage({ onEnter, onExplore, onDirectOffice }) {
           <div className="landing-hero-copy">
             <span className="landing-kicker"><i /> YOUR TEAM, IN THE SAME SPACE</span>
             <h1>Work together,<br /><span>naturally.</span></h1>
-            <p>Step into a shared virtual office. Find your team, move through the space, and make collaboration feel a little more human.</p>
+            <p>Step into a shared virtual office. Find your team, move through the space, and make collaboration feel human and spontaneous.</p>
             <div className="landing-hero-actions">
               <button type="button" className="landing-primary" onClick={onEnter}>Enter Virtual Office <span aria-hidden="true">→</span></button>
               {onDirectOffice && (
                 <button type="button" className="landing-direct-btn" onClick={onDirectOffice}>
-                  Launch oVice HQ / C-03 🏢
+                  Instant Demo Tour 🏢
                 </button>
               )}
               <button type="button" className="landing-secondary" onClick={onExplore}>Explore features <span aria-hidden="true">↓</span></button>
@@ -111,38 +97,8 @@ export default function LandingPage({ onEnter, onExplore, onDirectOffice }) {
             <article><span>3</span><div><h3>Find your people</h3><p>Move around the map and see teammates arrive in real time.</p></div></article>
           </div>
         </section>
-
-        <section className="module-status-section" id="week-one-modules">
-          <div className="module-status-heading">
-            <div>
-              <span className="landing-kicker">TRANSPARENT PROGRESS</span>
-              <h2>Week 1 frontend modules</h2>
-              <p>Implemented against the current ProxiSpeak client and backend contract.</p>
-            </div>
-            <span className="module-summary"><i /> 8 of 10 complete</span>
-          </div>
-          <div className="module-table-wrap">
-            <table className="module-table">
-              <caption className="visually-hidden">ProxiSpeak Week 1 frontend module status</caption>
-              <thead>
-                <tr><th scope="col">No.</th><th scope="col">Module</th><th scope="col">Features</th><th scope="col">Status</th></tr>
-              </thead>
-              <tbody>
-                {WEEK_ONE_MODULES.map(([number, module, features, status]) => (
-                  <tr key={number}>
-                    <td className="module-number">{number.padStart(2, '0')}</td>
-                    <th scope="row">{module}</th>
-                    <td className="module-features">{features}</td>
-                    <td><span className={`module-status ${status.toLowerCase()}`}><i />{status}</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="module-status-note"><strong>Remaining:</strong> add a drawn meeting-room table to the canvas; enable and validate MongoDB-backed persistence in the backend environment. Realtime presence and movement work through the existing Socket.io server.</p>
-        </section>
       </main>
-      <footer className="landing-footer"><a className="landing-brand" href="#"><span className="landing-brand-icon">P</span><span>Proxi<span>Speak</span></span></a><span>Shared space. Better work.</span><span>Week 1 · Live presence preview</span></footer>
+      <footer className="landing-footer"><a className="landing-brand" href="#"><span className="landing-brand-icon">P</span><span>Proxi<span>Speak</span></span></a><span>Shared space. Better work.</span><span>Live presence preview</span></footer>
     </div>
   );
 }

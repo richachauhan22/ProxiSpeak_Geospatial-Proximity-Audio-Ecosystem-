@@ -14,6 +14,8 @@ export default function BottomToolbar({
   onOpenSettings,
   onOpenAddMenu,
   onToggleMiniMap,
+  onLeaveOffice,
+  onOpenHelp,
   miniMapOpen = false,
 }) {
   const [reactionsOpen, setReactionsOpen] = useState(false);
@@ -74,7 +76,7 @@ export default function BottomToolbar({
 
         {profileMenuOpen && (
           <div className="profile-status-dropdown">
-            <div className="dropdown-header">Status</div>
+            <div className="dropdown-header">Presence Status</div>
             {['Available', 'Busy', 'In focus', 'Away'].map((st) => (
               <button
                 key={st}
@@ -89,6 +91,39 @@ export default function BottomToolbar({
                 <span>{st}</span>
               </button>
             ))}
+            <div className="dropdown-separator" />
+            <button
+              type="button"
+              className="status-opt opt-action"
+              onClick={() => {
+                setProfileMenuOpen(false);
+                if (onOpenSettings) onOpenSettings();
+              }}
+            >
+              <span>⚙️ Audio & Settings</span>
+            </button>
+            <button
+              type="button"
+              className="status-opt opt-action"
+              onClick={() => {
+                setProfileMenuOpen(false);
+                if (onOpenHelp) onOpenHelp();
+              }}
+            >
+              <span>❓ Movement Help</span>
+            </button>
+            {onLeaveOffice && (
+              <button
+                type="button"
+                className="status-opt opt-leave"
+                onClick={() => {
+                  setProfileMenuOpen(false);
+                  onLeaveOffice();
+                }}
+              >
+                <span>🚪 Leave Office</span>
+              </button>
+            )}
           </div>
         )}
 

@@ -10,9 +10,6 @@ describe('App', () => {
   it('renders the landing page and opens the join screen from the primary action', () => {
     render(<App />);
     expect(screen.getByRole('heading', { name: /work together/i })).toBeInTheDocument();
-    expect(screen.getByRole('table', { name: /week 1 frontend module status/i })).toBeInTheDocument();
-    expect(screen.getAllByText('Complete')).toHaveLength(8);
-    expect(screen.getAllByText('Partial')).toHaveLength(2);
     fireEvent.click(screen.getByRole('button', { name: /enter virtual office/i }));
     expect(screen.getByRole('heading', { name: /step into your office/i })).toBeInTheDocument();
   });

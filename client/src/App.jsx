@@ -8,7 +8,15 @@ import FloorSelector from './components/FloorSelector';
 import BottomToolbar from './components/BottomToolbar';
 import ChatDrawer from './components/ChatDrawer';
 import ParticipantsDrawer from './components/ParticipantsDrawer';
-import { CalendarModal, NotificationsModal, SettingsModal } from './components/OfficeModals';
+import MiniMapOverlay from './components/MiniMapOverlay';
+import {
+  CalendarModal,
+  NotificationsModal,
+  SettingsModal,
+  HelpModal,
+  QuickToolsModal,
+  LeaveConfirmModal,
+} from './components/OfficeModals';
 import { DEFAULT_LOCAL_USER, DEFAULT_OFFICE_PARTICIPANTS } from './office/OfficeMap';
 
 function App() {
@@ -18,6 +26,7 @@ function App() {
 
   const [displayName, setDisplayName] = useState('Mia');
   const [avatarColor, setAvatarColor] = useState('#2563eb');
+  const [avatarUrl, setAvatarUrl] = useState('/avatar_mia.png');
   const [officeId, setOfficeId] = useState('oVice HQ / C-03');
   const [joined, setJoined] = useState(() => window.location.pathname === '/office');
   const [localUser, setLocalUser] = useState(() => DEFAULT_LOCAL_USER);
@@ -37,6 +46,9 @@ function App() {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
   const [miniMapOpen, setMiniMapOpen] = useState(false);
 
   // Audio / Video toggles
@@ -59,7 +71,6 @@ function App() {
     },
     onConnectError: () => {
       setIsJoining(false);
-      // Even if standalone or offline, office preview is fully operational
     },
   });
 
@@ -87,6 +98,9 @@ function App() {
         ...DEFAULT_LOCAL_USER,
         ...user,
         displayName: user.displayName || displayName,
+        photoUrl: avatarUrl,
+        avatarColor: user.avatarColor || avatarColor,
+        ringColor: user.avatarColor || avatarColor,
       };
       localUserRef.current = mergedUser;
       setLocalUser(mergedUser);
@@ -120,8 +134,8 @@ function App() {
         localUserRef.current = null;
         setJoined(false);
         joinRequestRef.current = null;
-        setPage('join');
-        if (window.location.pathname !== '/join') window.history.pushState({}, '', '/join');
+        setPage('landing');
+        if (window.location.pathname !== '/') window.history.pushState({}, '', '/');
       }
     };
 
@@ -150,8 +164,8 @@ function App() {
     const handleOfficeLeft = () => {
       setJoined(false);
       joinRequestRef.current = null;
-      setPage('join');
-      if (window.location.pathname !== '/join') window.history.pushState({}, '', '/join');
+      setPage('landing');
+      if (window.location.pathname !== '/') window.history.pushState({}, '', '/');
     };
 
     socket.on('office:joined', handleJoined);
@@ -180,7 +194,7 @@ function App() {
       socket.off('error', handleError);
       socket.off('office:left', handleOfficeLeft);
     };
-  }, [joined, displayName]);
+  }, [joined, displayName, avatarUrl, avatarColor]);
 
   const emitJoin = () => {
     const socket = socketRef.current;
@@ -195,7 +209,7 @@ function App() {
 
     window.clearTimeout(joinTimeoutRef.current);
     joinTimeoutRef.current = window.setTimeout(() => {
-      // If server does not respond within 3s, enter office in local/interactive mode!
+      // Local interactive fallback
       setIsJoining(false);
       setJoined(true);
       setPage('office');
@@ -227,13 +241,14 @@ function App() {
       ...DEFAULT_LOCAL_USER,
       displayName: normalizedName,
       avatarColor,
+      ringColor: avatarColor,
+      photoUrl: avatarUrl,
     };
     setLocalUser(updatedUser);
     localUserRef.current = updatedUser;
 
     const socket = socketRef.current;
     if (!socket || !socket.connected) {
-      // Standalone mode -> enter office directly
       setJoined(true);
       setPage('office');
       setIsJoining(false);
@@ -242,6 +257,29 @@ function App() {
     }
 
     emitJoin();
+  };
+
+  const handleInstantDemo = () => {
+    const demoUser = {
+      ...DEFAULT_LOCAL_USER,
+      displayName: displayName || 'Mia',
+      avatarColor: avatarColor || '#2563eb',
+      ringColor: avatarColor || '#2563eb',
+      photoUrl: avatarUrl || '/avatar_mia.png',
+    };
+    setLocalUser(demoUser);
+    localUserRef.current = demoUser;
+    setJoined(true);
+    navigate('office');
+  };
+
+  const handleLeaveOffice = () => {
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('office:leave', { officeId });
+    }
+    setJoined(false);
+    joinRequestRef.current = null;
+    navigate('landing');
   };
 
   const handleLocalMove = (nextPosition) => {
@@ -293,7 +331,7 @@ function App() {
       {page === 'landing' && !joined ? (
         <LandingPage
           onEnter={() => navigate('join')}
-          onDirectOffice={() => navigate('office')}
+          onDirectOffice={handleInstantDemo}
           onExplore={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}
         />
       ) : page === 'join' && !joined ? (
@@ -302,6 +340,8 @@ function App() {
           setDisplayName={setDisplayName}
           avatarColor={avatarColor}
           setAvatarColor={setAvatarColor}
+          avatarUrl={avatarUrl}
+          setAvatarUrl={setAvatarUrl}
           officeId={officeId}
           setOfficeId={setOfficeId}
           onSubmit={handleJoinOffice}
@@ -311,18 +351,20 @@ function App() {
           loading={isJoining}
         />
       ) : (
-        /* ================= EXACT OVICE VIRTUAL OFFICE UI ================= */
+        /* ================= VIRTUAL OFFICE WORKSPACE ================= */
         <div className="ovice-office-container">
           {/* 1. Header (Navbar) */}
           <OviceHeader
             officeId={officeId}
             participantCount={participants.length + (localUser ? 1 : 0)}
-            connectionStatus="Fast"
+            connectionStatus={connectionStatus === 'connected' ? 'Fast' : connectionStatus}
             onToggleMenu={() => setSettingsOpen(true)}
             onToggleParticipants={() => setParticipantsOpen((prev) => !prev)}
             onToggleChat={() => setChatOpen((prev) => !prev)}
             onToggleCalendar={() => setCalendarOpen(true)}
             onToggleNotifications={() => setNotificationsOpen(true)}
+            onOpenHelp={() => setHelpOpen(true)}
+            onLeaveOffice={() => setLeaveConfirmOpen(true)}
             chatOpen={chatOpen}
             participantsOpen={participantsOpen}
           />
@@ -358,6 +400,15 @@ function App() {
               </div>
             ))}
 
+            {/* Radar Mini-map Overlay */}
+            <MiniMapOverlay
+              isOpen={miniMapOpen}
+              onClose={() => setMiniMapOpen(false)}
+              localUser={localUser}
+              participants={participants}
+              onTeleport={(x, y) => handleLocalMove({ x, y })}
+            />
+
             {/* Bottom Floating Controls Toolbar */}
             <BottomToolbar
               localUser={localUser}
@@ -370,13 +421,20 @@ function App() {
               isVideoOn={isVideoOn}
               onReaction={handleReaction}
               onOpenSettings={() => setSettingsOpen(true)}
-              onOpenAddMenu={() => setChatOpen(true)}
+              onOpenAddMenu={() => setToolsOpen(true)}
               onToggleMiniMap={() => setMiniMapOpen((prev) => !prev)}
+              onLeaveOffice={() => setLeaveConfirmOpen(true)}
+              onOpenHelp={() => setHelpOpen(true)}
               miniMapOpen={miniMapOpen}
             />
 
             {/* Side Drawers */}
-            <ChatDrawer isOpen={chatOpen} onClose={() => setChatOpen(false)} officeId={officeId} />
+            <ChatDrawer
+              isOpen={chatOpen}
+              onClose={() => setChatOpen(false)}
+              officeId={officeId}
+              localUser={localUser}
+            />
             <ParticipantsDrawer
               isOpen={participantsOpen}
               onClose={() => setParticipantsOpen(false)}
@@ -387,7 +445,18 @@ function App() {
             {/* Modals */}
             <CalendarModal isOpen={calendarOpen} onClose={() => setCalendarOpen(false)} />
             <NotificationsModal isOpen={notificationsOpen} onClose={() => setNotificationsOpen(false)} />
-            <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
+            <SettingsModal
+              isOpen={settingsOpen}
+              onClose={() => setSettingsOpen(false)}
+              onLeaveOffice={() => setLeaveConfirmOpen(true)}
+            />
+            <HelpModal isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
+            <QuickToolsModal isOpen={toolsOpen} onClose={() => setToolsOpen(false)} />
+            <LeaveConfirmModal
+              isOpen={leaveConfirmOpen}
+              onClose={() => setLeaveConfirmOpen(false)}
+              onConfirm={handleLeaveOffice}
+            />
           </main>
         </div>
       )}
