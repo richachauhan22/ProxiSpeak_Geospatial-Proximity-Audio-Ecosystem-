@@ -25,7 +25,7 @@ export default function JoinOfficePage({
       <main className="join-content">
         <button type="button" className="join-back" onClick={onBack}>← <span>Back to home</span></button>
         <section className="join-card">
-          <span className="join-card-icon">✳</span>
+          <span className="join-card-icon">✳*</span>
           <p className="eyebrow">YOUR TEAM IS WAITING</p>
           <h1>Step into your office.</h1>
           <p className="join-lede">Choose how you’ll show up, then join your shared workspace.</p>
