@@ -18,11 +18,13 @@ import {
   LeaveConfirmModal,
 } from './components/OfficeModals';
 import { DEFAULT_LOCAL_USER, DEFAULT_OFFICE_PARTICIPANTS } from './office/OfficeMap';
+import { sounds } from './services/soundEffects';
 
 function App() {
   const joinRequestRef = useRef(null);
   const localUserRef = useRef(null);
   const joinTimeoutRef = useRef(null);
+  const toastTimeoutRef = useRef(null);
 
   const [displayName, setDisplayName] = useState('Mia');
   const [avatarColor, setAvatarColor] = useState('#2563eb');
@@ -36,6 +38,7 @@ function App() {
   const [zoomLevel, setZoomLevel] = useState(100);
   const [panPosition, setPanPosition] = useState({ x: 0, y: 0 });
   const [recenterCount, setRecenterCount] = useState(0);
+  const [toastMessage, setToastMessage] = useState('');
 
   // Floating reactions
   const [reactions, setReactions] = useState([]);
@@ -60,6 +63,14 @@ function App() {
     if (window.location.pathname === '/join') return 'join';
     return 'landing';
   });
+
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    window.clearTimeout(toastTimeoutRef.current);
+    toastTimeoutRef.current = window.setTimeout(() => {
+      setToastMessage('');
+    }, 2800);
+  };
 
   const { socketRef, connectionStatus, setConnectionStatus } = useSocket({
     onConnect: () => {
@@ -115,6 +126,7 @@ function App() {
 
       setJoined(true);
       setPage('office');
+      showToast(`Welcome to ${officeId}!`);
       if (window.location.pathname !== '/office') window.history.pushState({}, '', '/office');
       setError('');
     };
@@ -123,6 +135,7 @@ function App() {
       setParticipants((current) => {
         const existing = current.find((member) => member.id === user.id);
         if (existing) return current;
+        showToast(`${user.displayName || 'A teammate'} joined the office`);
         return [...current, { ...user }];
       });
     };
@@ -213,6 +226,7 @@ function App() {
       setIsJoining(false);
       setJoined(true);
       setPage('office');
+      showToast(`Joined ${officeId}`);
       if (window.location.pathname !== '/office') window.history.pushState({}, '', '/office');
     }, 1500);
   };
@@ -252,6 +266,7 @@ function App() {
       setJoined(true);
       setPage('office');
       setIsJoining(false);
+      showToast(`Joined ${officeId}`);
       if (window.location.pathname !== '/office') window.history.pushState({}, '', '/office');
       return;
     }
@@ -270,6 +285,7 @@ function App() {
     setLocalUser(demoUser);
     localUserRef.current = demoUser;
     setJoined(true);
+    showToast('Entered demo office mode');
     navigate('office');
   };
 
@@ -310,12 +326,17 @@ function App() {
         isMuted: next,
         isSpeaking: !next,
       }));
+      showToast(next ? 'Microphone Muted' : 'Microphone Unmuted');
       return next;
     });
   };
 
   const handleToggleVideo = () => {
-    setIsVideoOn((prev) => !prev);
+    setIsVideoOn((prev) => {
+      const next = !prev;
+      showToast(next ? 'Camera Turned On' : 'Camera Turned Off');
+      return next;
+    });
   };
 
   const handleReaction = (emoji) => {
@@ -327,7 +348,15 @@ function App() {
   };
 
   return (
-    <div className={`app-shell ${page}-shell`}>
+    <div className={`app-shell ${page}-shell modern-theme`}>
+      {/* Floating Toast Notification */}
+      {toastMessage && (
+        <div className="proxi-toast-banner" role="status">
+          <span className="toast-sparkle">✨</span>
+          <span className="toast-content">{toastMessage}</span>
+        </div>
+      )}
+
       {page === 'landing' && !joined ? (
         <LandingPage
           onEnter={() => navigate('join')}
@@ -352,8 +381,8 @@ function App() {
         />
       ) : (
         /* ================= VIRTUAL OFFICE WORKSPACE ================= */
-        <div className="ovice-office-container">
-          {/* 1. Header (Navbar) */}
+        <div className="ovice-office-container modern-office-viewport">
+          {/* 1. Modern Frosted Header */}
           <OviceHeader
             officeId={officeId}
             participantCount={participants.length + (localUser ? 1 : 0)}
@@ -367,12 +396,16 @@ function App() {
             onLeaveOffice={() => setLeaveConfirmOpen(true)}
             chatOpen={chatOpen}
             participantsOpen={participantsOpen}
+            onCopyLink={() => showToast('Office link copied to clipboard!')}
           />
 
           {/* 2. Main Floor Workspace */}
-          <main className="ovice-main-viewport">
+          <main className="ovice-main-viewport modern-canvas-holder">
             {/* Left Floating Floor Selector Widget (6F) */}
-            <FloorSelector currentFloor={6} />
+            <FloorSelector
+              currentFloor={6}
+              onFloorChange={(fl) => showToast(`Elevator moved to Floor ${fl}F`)}
+            />
 
             {/* Virtual Office Floor Canvas */}
             <OfficeCanvas
@@ -390,7 +423,7 @@ function App() {
             {reactions.map((r) => (
               <div
                 key={r.id}
-                className="floating-emoji"
+                className="floating-emoji modern-floating-reaction"
                 style={{
                   left: `calc(50% + ${(r.x - 720) * (zoomLevel / 100) + panPosition.x}px)`,
                   top: `calc(50% + ${(r.y - 447) * (zoomLevel / 100) + panPosition.y}px)`,
@@ -406,7 +439,10 @@ function App() {
               onClose={() => setMiniMapOpen(false)}
               localUser={localUser}
               participants={participants}
-              onTeleport={(x, y) => handleLocalMove({ x, y })}
+              onTeleport={(x, y) => {
+                handleLocalMove({ x, y });
+                showToast('Navigated to map coordinate');
+              }}
             />
 
             {/* Bottom Floating Controls Toolbar */}
@@ -414,7 +450,10 @@ function App() {
               localUser={localUser}
               zoomLevel={zoomLevel}
               onZoomChange={(next) => setZoomLevel(next)}
-              onRecenter={() => setRecenterCount((c) => c + 1)}
+              onRecenter={() => {
+                setRecenterCount((c) => c + 1);
+                showToast('View recentered on avatar');
+              }}
               onToggleMute={handleToggleMute}
               onToggleVideo={handleToggleVideo}
               isMuted={isMuted}
@@ -440,10 +479,21 @@ function App() {
               onClose={() => setParticipantsOpen(false)}
               participants={participants}
               localUser={localUser}
+              onTeleportToUser={(x, y) => {
+                handleLocalMove({ x, y });
+                showToast('Walked to teammate');
+              }}
             />
 
             {/* Modals */}
-            <CalendarModal isOpen={calendarOpen} onClose={() => setCalendarOpen(false)} />
+            <CalendarModal
+              isOpen={calendarOpen}
+              onClose={() => setCalendarOpen(false)}
+              onJoinMeetingArea={(x, y) => {
+                handleLocalMove({ x, y });
+                showToast('Arrived at meeting zone');
+              }}
+            />
             <NotificationsModal isOpen={notificationsOpen} onClose={() => setNotificationsOpen(false)} />
             <SettingsModal
               isOpen={settingsOpen}

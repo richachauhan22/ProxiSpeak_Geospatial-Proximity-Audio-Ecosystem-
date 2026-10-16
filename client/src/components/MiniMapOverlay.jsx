@@ -10,8 +10,8 @@ export default function MiniMapOverlay({
 }) {
   if (!isOpen) return null;
 
-  const width = 240;
-  const height = 149; // aspect ratio matching 1440 x 894
+  const width = 260;
+  const height = 161; // aspect ratio matching 1440 x 894
 
   const toMiniX = (worldX) => (worldX / OFFICE_DIMENSIONS.width) * width;
   const toMiniY = (worldY) => (worldY / OFFICE_DIMENSIONS.height) * height;
@@ -20,26 +20,30 @@ export default function MiniMapOverlay({
     const rect = e.currentTarget.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const clickY = e.clientY - rect.top;
-    const worldX = (clickX / width) * OFFICE_DIMENSIONS.width;
-    const worldY = (clickY / height) * OFFICE_DIMENSIONS.height;
+    const worldX = Math.round((clickX / width) * OFFICE_DIMENSIONS.width);
+    const worldY = Math.round((clickY / height) * OFFICE_DIMENSIONS.height);
     if (onTeleport) {
       onTeleport(worldX, worldY);
     }
   };
 
   return (
-    <div className="ovice-minimap-card" role="region" aria-label="Floor mini-map">
+    <div className="ovice-minimap-card modern-minimap glass-panel" role="region" aria-label="Floor radar mini-map">
       <div className="minimap-header">
-        <span>Floor 6 Radar</span>
-        <button type="button" className="minimap-close" onClick={onClose} aria-label="Close mini-map">✕</button>
+        <div className="minimap-title-group">
+          <span className="radar-live-beacon" />
+          <span className="radar-title">Floor 6 Radar</span>
+        </div>
+        <button type="button" className="minimap-close" onClick={onClose} aria-label="Close radar">✕</button>
       </div>
 
       <div
         className="minimap-canvas-area"
         style={{ width: `${width}px`, height: `${height}px` }}
         onClick={handleMapClick}
-        title="Click anywhere to walk there"
+        title="Click anywhere to walk directly there"
       >
+        {/* Floor plan base */}
         <img
           src="/office_map.png"
           alt="Floor plan"
@@ -47,11 +51,15 @@ export default function MiniMapOverlay({
           onError={(e) => { e.target.style.display = 'none'; }}
         />
 
-        {/* Remote participant dots */}
+        {/* Radar grid and sweep animation */}
+        <div className="radar-grid-overlay" />
+        <div className="radar-sweep-beam" />
+
+        {/* Remote participant pins */}
         {participants.map((p) => {
           if (localUser && p.id === localUser.id) return null;
           return (
-            <span
+            <div
               key={p.id}
               className="minimap-dot remote"
               style={{
@@ -59,14 +67,16 @@ export default function MiniMapOverlay({
                 top: `${toMiniY(p.y)}px`,
                 background: p.ringColor || p.avatarColor || '#8b5cf6',
               }}
-              title={p.displayName}
-            />
+              title={`${p.displayName} (${p.status || 'Active'})`}
+            >
+              <span className="dot-tooltip">{p.displayName}</span>
+            </div>
           );
         })}
 
-        {/* Local user dot */}
+        {/* Local user pin with aura */}
         {localUser && (
-          <span
+          <div
             className="minimap-dot local-user"
             style={{
               left: `${toMiniX(localUser.x)}px`,
@@ -75,10 +85,14 @@ export default function MiniMapOverlay({
             title={`${localUser.displayName} (You)`}
           >
             <span className="minimap-pulse" />
-          </span>
+            <span className="dot-tooltip you">You</span>
+          </div>
         )}
       </div>
-      <div className="minimap-hint">Click floor to navigate</div>
+
+      <div className="minimap-hint">
+        <span>📍 Click floor plan to navigate instantly</span>
+      </div>
     </div>
   );
 }
