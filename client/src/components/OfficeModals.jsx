@@ -155,10 +155,33 @@ export function NotificationsModal({ isOpen, onClose }) {
   );
 }
 
-export function SettingsModal({ isOpen, onClose, onLeaveOffice }) {
-  const [proximityDistance, setProximityDistance] = useState(240);
+export function SettingsModal({
+  isOpen,
+  onClose,
+  onLeaveOffice,
+  proximityDistance = 240,
+  onProximityChange,
+  audioLevel = 0,
+  isMuted = false,
+  permissionStatus = 'idle',
+  onRequestMic,
+}) {
+  const [localDistance, setLocalDistance] = useState(proximityDistance);
   const [spatialAudioEnabled, setSpatialAudioEnabled] = useState(true);
   const [soundEffectsEnabled, setSoundEffectsEnabled] = useState(true);
+  const [audioDevices, setAudioDevices] = useState([]);
+  const [selectedDevice, setSelectedDevice] = useState('default');
+
+  React.useEffect(() => {
+    if (isOpen && navigator?.mediaDevices?.enumerateDevices) {
+      navigator.mediaDevices.enumerateDevices().then((devices) => {
+        const mics = devices.filter((d) => d.kind === 'audioinput');
+        if (mics.length > 0) {
+          setAudioDevices(mics);
+        }
+      }).catch(() => {});
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -170,7 +193,7 @@ export function SettingsModal({ isOpen, onClose, onLeaveOffice }) {
             <span className="modal-icon">⚙️</span>
             <div>
               <h3>Workspace & Audio Settings</h3>
-              <span className="modal-subtitle">Configure devices and spatial parameters</span>
+              <span className="modal-subtitle">Configure WebRTC devices and spatial parameters</span>
             </div>
           </div>
           <button type="button" className="modal-close" onClick={onClose}>✕</button>
@@ -179,11 +202,57 @@ export function SettingsModal({ isOpen, onClose, onLeaveOffice }) {
         <div className="modal-body settings-body">
           <div className="setting-group">
             <label>Microphone Device</label>
-            <select className="setting-select" defaultValue="default">
-              <option value="default">Default — High Definition Audio Device</option>
-              <option value="headset">External Headset Microphone (Pro Studio)</option>
-              <option value="airpods">Bluetooth Audio Input</option>
+            <select
+              className="setting-select"
+              value={selectedDevice}
+              onChange={(e) => {
+                setSelectedDevice(e.target.value);
+                if (onRequestMic) onRequestMic(e.target.value);
+              }}
+            >
+              <option value="default">Default — System Microphone</option>
+              {audioDevices.map((dev, idx) => (
+                <option key={dev.deviceId || idx} value={dev.deviceId}>
+                  {dev.label || `Microphone ${idx + 1}`}
+                </option>
+              ))}
             </select>
+
+            {/* Live Mic Level Test Meter */}
+            <div className="mic-test-meter-row" style={{ marginTop: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>
+                <span>Input Level {permissionStatus === 'denied' ? '(Permission Blocked)' : isMuted ? '(Muted)' : ''}</span>
+                <span>{permissionStatus === 'granted' ? 'Connected' : permissionStatus}</span>
+              </div>
+              <div style={{ width: '100%', height: '8px', background: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
+                <div
+                  style={{
+                    width: `${isMuted ? 0 : Math.min(100, Math.round(audioLevel * 100))}%`,
+                    height: '100%',
+                    background: audioLevel > 0.6 ? '#ef4444' : '#10b981',
+                    transition: 'width 0.08s ease-out',
+                  }}
+                />
+              </div>
+              {permissionStatus === 'denied' && onRequestMic && (
+                <button
+                  type="button"
+                  onClick={() => onRequestMic()}
+                  style={{
+                    marginTop: '8px',
+                    padding: '6px 12px',
+                    background: '#2563eb',
+                    color: '#fff',
+                    borderRadius: '6px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                  }}
+                >
+                  Allow Microphone Access
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="setting-group">
@@ -197,14 +266,18 @@ export function SettingsModal({ isOpen, onClose, onLeaveOffice }) {
           <div className="setting-group">
             <div className="slider-label-row">
               <label>Spatial Proximity Audio Falloff</label>
-              <strong>{proximityDistance} px radius</strong>
+              <strong>{localDistance} px radius</strong>
             </div>
             <input
               type="range"
               min="100"
               max="400"
-              value={proximityDistance}
-              onChange={(e) => setProximityDistance(Number(e.target.value))}
+              value={localDistance}
+              onChange={(e) => {
+                const val = Number(e.target.value);
+                setLocalDistance(val);
+                onProximityChange?.(val);
+              }}
               className="modern-range-slider"
             />
             <span className="setting-help">

@@ -10,6 +10,9 @@ export default function BottomToolbar({
   onToggleVideo,
   isMuted = false,
   isVideoOn = true,
+  isSpeaking = false,
+  audioLevel = 0,
+  permissionStatus = 'idle',
   onReaction,
   onOpenSettings,
   onOpenAddMenu,
@@ -98,10 +101,10 @@ export default function BottomToolbar({
 
           {/* Mini audio activity indicator */}
           {!isMuted && (
-            <div className="mini-voice-wave" title="Speaking">
-              <span className="bar b1" />
-              <span className="bar b2" />
-              <span className="bar b3" />
+            <div className={`mini-voice-wave ${isSpeaking ? 'speaking' : ''}`} title={isSpeaking ? 'Speaking' : 'Listening'}>
+              <span className="bar b1" style={isSpeaking ? { height: `${Math.max(6, Math.min(18, 6 + audioLevel * 20))}px` } : {}} />
+              <span className="bar b2" style={isSpeaking ? { height: `${Math.max(10, Math.min(22, 10 + audioLevel * 24))}px` } : {}} />
+              <span className="bar b3" style={isSpeaking ? { height: `${Math.max(6, Math.min(18, 6 + audioLevel * 20))}px` } : {}} />
             </div>
           )}
         </div>
@@ -168,15 +171,21 @@ export default function BottomToolbar({
         {/* Microphone Toggle Button */}
         <button
           type="button"
-          className={`pill-btn mic-btn ${isMuted ? 'muted' : 'active'}`}
+          className={`pill-btn mic-btn ${isMuted ? 'muted' : 'active'} ${permissionStatus === 'denied' ? 'permission-denied' : ''} ${isSpeaking ? 'mic-speaking' : ''}`}
           onClick={() => {
             sounds.playClick();
             if (onToggleMute) onToggleMute();
           }}
-          aria-label={isMuted ? 'Unmute microphone' : 'Mute microphone'}
-          title={isMuted ? 'Unmute microphone (Space)' : 'Mute microphone (Space)'}
+          aria-label={permissionStatus === 'denied' ? 'Microphone blocked (click to retry)' : isMuted ? 'Unmute microphone' : 'Mute microphone'}
+          title={permissionStatus === 'denied' ? 'Microphone blocked by browser (click to retry)' : isMuted ? 'Unmute microphone (Space)' : 'Mute microphone (Space)'}
         >
-          {isMuted ? (
+          {permissionStatus === 'denied' ? (
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-400">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+              <line x1="12" y1="9" x2="12" y2="13" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+          ) : isMuted ? (
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="1" y1="1" x2="23" y2="23" />
               <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />

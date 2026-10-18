@@ -3,6 +3,7 @@ import OfficeCanvas from './office/OfficeCanvas';
 import JoinOfficePage from './pages/JoinOfficePage';
 import LandingPage from './pages/LandingPage';
 import { useSocket } from './hooks/useSocket';
+import { useWebRTC } from './hooks/useWebRTC';
 import OviceHeader from './components/OviceHeader';
 import FloorSelector from './components/FloorSelector';
 import BottomToolbar from './components/BottomToolbar';
@@ -53,9 +54,9 @@ function App() {
   const [toolsOpen, setToolsOpen] = useState(false);
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
   const [miniMapOpen, setMiniMapOpen] = useState(false);
+  const [proximityDistance, setProximityDistance] = useState(240);
 
-  // Audio / Video toggles
-  const [isMuted, setIsMuted] = useState(false);
+  // Video toggle
   const [isVideoOn, setIsVideoOn] = useState(true);
 
   const [page, setPage] = useState(() => {
@@ -84,6 +85,43 @@ function App() {
       setIsJoining(false);
     },
   });
+
+  const isOfficeActive = (joined || page === 'office');
+
+  const {
+    localStream,
+    isMuted,
+    isLocalSpeaking,
+    audioLevel,
+    permissionStatus,
+    speakingPeers,
+    webrtcError,
+    startAudio,
+    stopAudio,
+    toggleMute,
+  } = useWebRTC({
+    socketRef,
+    localUser,
+    participants,
+    enabled: isOfficeActive,
+    spatialConfig: {
+      maxDistance: proximityDistance,
+    },
+  });
+
+  useEffect(() => {
+    if (isOfficeActive) {
+      startAudio().catch(() => {});
+    } else {
+      stopAudio();
+    }
+  }, [isOfficeActive, startAudio, stopAudio]);
+
+  useEffect(() => {
+    if (webrtcError) {
+      showToast(webrtcError);
+    }
+  }, [webrtcError]);
 
   const navigate = (nextPage) => {
     const path = nextPage === 'landing' ? '/' : `/${nextPage}`;
@@ -290,6 +328,7 @@ function App() {
   };
 
   const handleLeaveOffice = () => {
+    stopAudio();
     if (socketRef.current?.connected) {
       socketRef.current.emit('office:leave', { officeId });
     }
@@ -319,16 +358,16 @@ function App() {
   };
 
   const handleToggleMute = () => {
-    setIsMuted((prev) => {
-      const next = !prev;
-      setLocalUser((curr) => ({
-        ...curr,
-        isMuted: next,
-        isSpeaking: !next,
-      }));
-      showToast(next ? 'Microphone Muted' : 'Microphone Unmuted');
-      return next;
-    });
+    if (permissionStatus === 'denied' || !localStream) {
+      startAudio().then((stream) => {
+        if (stream) {
+          showToast('Microphone connected via WebRTC');
+        }
+      });
+      return;
+    }
+    const nextMuted = toggleMute();
+    showToast(nextMuted ? 'Microphone Muted' : 'Microphone Unmuted');
   };
 
   const handleToggleVideo = () => {
@@ -346,6 +385,17 @@ function App() {
       setReactions((prev) => prev.filter((r) => r.id !== id));
     }, 2400);
   };
+
+  const currentLocalUser = {
+    ...localUser,
+    isMuted,
+    isSpeaking: isLocalSpeaking,
+  };
+
+  const activeParticipants = participants.map((p) => ({
+    ...p,
+    isSpeaking: speakingPeers.has(p.id) || Boolean(p.isSpeaking),
+  }));
 
   return (
     <div className={`app-shell ${page}-shell modern-theme`}>
@@ -385,7 +435,7 @@ function App() {
           {/* 1. Modern Frosted Header */}
           <OviceHeader
             officeId={officeId}
-            participantCount={participants.length + (localUser ? 1 : 0)}
+            participantCount={activeParticipants.length + (currentLocalUser ? 1 : 0)}
             connectionStatus={connectionStatus === 'connected' ? 'Fast' : connectionStatus}
             onToggleMenu={() => setSettingsOpen(true)}
             onToggleParticipants={() => setParticipantsOpen((prev) => !prev)}
@@ -409,8 +459,8 @@ function App() {
 
             {/* Virtual Office Floor Canvas */}
             <OfficeCanvas
-              localUser={localUser}
-              participants={participants}
+              localUser={currentLocalUser}
+              participants={activeParticipants}
               onLocalMove={handleLocalMove}
               zoom={zoomLevel}
               panX={panPosition.x}
@@ -437,8 +487,8 @@ function App() {
             <MiniMapOverlay
               isOpen={miniMapOpen}
               onClose={() => setMiniMapOpen(false)}
-              localUser={localUser}
-              participants={participants}
+              localUser={currentLocalUser}
+              participants={activeParticipants}
               onTeleport={(x, y) => {
                 handleLocalMove({ x, y });
                 showToast('Navigated to map coordinate');
@@ -447,7 +497,7 @@ function App() {
 
             {/* Bottom Floating Controls Toolbar */}
             <BottomToolbar
-              localUser={localUser}
+              localUser={currentLocalUser}
               zoomLevel={zoomLevel}
               onZoomChange={(next) => setZoomLevel(next)}
               onRecenter={() => {
@@ -458,6 +508,9 @@ function App() {
               onToggleVideo={handleToggleVideo}
               isMuted={isMuted}
               isVideoOn={isVideoOn}
+              isSpeaking={isLocalSpeaking}
+              audioLevel={audioLevel}
+              permissionStatus={permissionStatus}
               onReaction={handleReaction}
               onOpenSettings={() => setSettingsOpen(true)}
               onOpenAddMenu={() => setToolsOpen(true)}
@@ -472,13 +525,13 @@ function App() {
               isOpen={chatOpen}
               onClose={() => setChatOpen(false)}
               officeId={officeId}
-              localUser={localUser}
+              localUser={currentLocalUser}
             />
             <ParticipantsDrawer
               isOpen={participantsOpen}
               onClose={() => setParticipantsOpen(false)}
-              participants={participants}
-              localUser={localUser}
+              participants={activeParticipants}
+              localUser={currentLocalUser}
               onTeleportToUser={(x, y) => {
                 handleLocalMove({ x, y });
                 showToast('Walked to teammate');
@@ -499,6 +552,12 @@ function App() {
               isOpen={settingsOpen}
               onClose={() => setSettingsOpen(false)}
               onLeaveOffice={() => setLeaveConfirmOpen(true)}
+              proximityDistance={proximityDistance}
+              onProximityChange={setProximityDistance}
+              audioLevel={audioLevel}
+              isMuted={isMuted}
+              permissionStatus={permissionStatus}
+              onRequestMic={startAudio}
             />
             <HelpModal isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
             <QuickToolsModal isOpen={toolsOpen} onClose={() => setToolsOpen(false)} />

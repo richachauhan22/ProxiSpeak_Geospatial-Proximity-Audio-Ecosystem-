@@ -2679,6 +2679,17 @@ a {
   color: #dc2626;
 }
 
+.pill-btn.mic-btn.mic-speaking {
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.35);
+  border-color: #22c55e;
+}
+
+.pill-btn.mic-btn.permission-denied {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #d97706;
+}
+
 .pill-btn.camera-active {
   background: #eff6ff;
   border-color: #93c5fd;

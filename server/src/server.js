@@ -295,6 +295,45 @@ io.on('connection', (socket) => {
     socket.emit('office:left', { officeId: targetOfficeId });
   });
 
+  socket.on('webrtc:offer', (payload) => {
+    const user = activeUsers.get(socket.id);
+    if (!user) return;
+    const targetId = payload?.targetId;
+    const target = [...activeUsers.values()].find((u) => u.id === targetId || u.socketId === targetId);
+    if (target) {
+      io.to(target.socketId).emit('webrtc:offer', {
+        senderId: user.id,
+        offer: payload.offer,
+      });
+    }
+  });
+
+  socket.on('webrtc:answer', (payload) => {
+    const user = activeUsers.get(socket.id);
+    if (!user) return;
+    const targetId = payload?.targetId;
+    const target = [...activeUsers.values()].find((u) => u.id === targetId || u.socketId === targetId);
+    if (target) {
+      io.to(target.socketId).emit('webrtc:answer', {
+        senderId: user.id,
+        answer: payload.answer,
+      });
+    }
+  });
+
+  socket.on('webrtc:ice-candidate', (payload) => {
+    const user = activeUsers.get(socket.id);
+    if (!user) return;
+    const targetId = payload?.targetId;
+    const target = [...activeUsers.values()].find((u) => u.id === targetId || u.socketId === targetId);
+    if (target) {
+      io.to(target.socketId).emit('webrtc:ice-candidate', {
+        senderId: user.id,
+        candidate: payload.candidate,
+      });
+    }
+  });
+
   socket.on('disconnect', () => {
     const user = activeUsers.get(socket.id);
     if (!user) {
