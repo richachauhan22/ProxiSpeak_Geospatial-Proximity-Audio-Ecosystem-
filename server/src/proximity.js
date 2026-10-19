@@ -15,3 +15,11 @@ export function areUsersNearby(userA, userB) {
     getDistance(userA, userB) <= HEARING_RADIUS
   );
 }
+
+export function canExchangeWebRTCSignal(sender, recipient) {
+  if (!sender || !recipient) {
+    return false;
+  }
+
+  return areUsersNearby(sender, recipient);
+}
