@@ -265,10 +265,11 @@ export function SettingsModal({
 
           <div className="setting-group">
             <div className="slider-label-row">
-              <label>Spatial Proximity Audio Falloff</label>
+              <label htmlFor="proximity-falloff-slider">Spatial Proximity Audio Falloff</label>
               <strong>{localDistance} px radius</strong>
             </div>
             <input
+              id="proximity-falloff-slider"
               type="range"
               min="100"
               max="400"

@@ -63,7 +63,10 @@ export class WebRTCManager {
 
   getAudioContext() {
     if (!this.audioContext) {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const AudioCtx =
+        (typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext)) ||
+        (typeof globalThis !== 'undefined' && (globalThis.AudioContext || globalThis.webkitAudioContext)) ||
+        null;
       if (AudioCtx) {
         this.audioContext = new AudioCtx();
       }

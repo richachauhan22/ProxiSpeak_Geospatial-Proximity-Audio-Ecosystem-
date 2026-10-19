@@ -14,6 +14,7 @@ export function useWebRTC({
   spatialConfig,
 } = {}) {
   const managerRef = useRef(null);
+  const [managerInstance, setManagerInstance] = useState(null);
   const [localStream, setLocalStream] = useState(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isLocalSpeaking, setIsLocalSpeaking] = useState(false);
@@ -72,10 +73,12 @@ export function useWebRTC({
     });
 
     managerRef.current = manager;
+    setManagerInstance(manager);
 
     return () => {
       manager.destroy();
       managerRef.current = null;
+      setManagerInstance(null);
     };
   }, [spatialConfig]);
 
@@ -226,6 +229,6 @@ export function useWebRTC({
     stopAudio,
     toggleMute,
     setMute,
-    manager: managerRef.current,
+    manager: managerInstance || managerRef.current,
   };
 }
