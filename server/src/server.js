@@ -6,8 +6,10 @@ import { randomUUID } from 'node:crypto';
 import { Server } from 'socket.io';
 import { config } from './config.js';
 import { OfficeModel } from './officeSchema.js';
-import { areUsersNearby } from './proximity.js';
-
+import {
+  areUsersNearby,
+  canExchangeWebRTCSignal,
+} from './proximity.js';
 const app = express();
 const httpServer = http.createServer(app);
 
