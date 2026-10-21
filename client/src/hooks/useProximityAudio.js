@@ -1,6 +1,7 @@
 
-
 import { useEffect, useRef, useState } from 'react';
+
+const PROXIMITY_RADIUS = 100;
 
 const RTC_CONFIG = {
   iceServers: [
@@ -20,8 +21,10 @@ export function useProximityAudio({
   const localStreamRef = useRef(null);
   const audioElementsRef = useRef(new Map());
   const pendingCandidatesRef = useRef(new Map());
-
+  const offersInProgressRef = useRef(new Set());
+  const syncNearbyRef = useRef(null);
   const latestRef = useRef({});
+
   const [micStatus, setMicStatus] = useState('off');
   const [audioError, setAudioError] = useState('');
 
@@ -43,7 +46,7 @@ export function useProximityAudio({
 
     let disposed = false;
 
-    const closePeer = (userId) => {
+    function closePeer(userId) {
       const pc = peerConnectionsRef.current.get(userId);
 
       if (pc) {
@@ -54,18 +57,20 @@ export function useProximityAudio({
         peerConnectionsRef.current.delete(userId);
       }
 
+      offersInProgressRef.current.delete(userId);
       pendingCandidatesRef.current.delete(userId);
 
       const audio = audioElementsRef.current.get(userId);
 
       if (audio) {
+        audio.pause();
         audio.srcObject = null;
         audio.remove();
         audioElementsRef.current.delete(userId);
       }
-    };
+    }
 
-    const createPeer = (userId) => {
+    function createPeer(userId) {
       let pc = peerConnectionsRef.current.get(userId);
 
       if (pc) return pc;
@@ -76,13 +81,13 @@ export function useProximityAudio({
       const stream = localStreamRef.current;
 
       if (stream) {
-        stream.getTracks().forEach((track) => {
+        stream.getAudioTracks().forEach((track) => {
           pc.addTrack(track, stream);
         });
       }
 
       pc.onicecandidate = (event) => {
-        if (event.candidate && socket.connected) {
+        if (event.candidate && socket.connected && !disposed) {
           socket.emit('webrtc:ice-candidate', {
             toUserId: userId,
             candidate: event.candidate,
@@ -91,6 +96,8 @@ export function useProximityAudio({
       };
 
       pc.ontrack = (event) => {
+        if (disposed) return;
+
         let audio = audioElementsRef.current.get(userId);
 
         if (!audio) {
@@ -98,17 +105,21 @@ export function useProximityAudio({
           audio.autoplay = true;
           audio.playsInline = true;
           audio.setAttribute('aria-label', 'Participant voice');
+
           document.body.appendChild(audio);
           audioElementsRef.current.set(userId, audio);
         }
 
-        const [remoteStream] = event.streams;
+        const remoteStream = event.streams?.[0];
 
         if (remoteStream) {
           audio.srcObject = remoteStream;
-          audio.play().catch(() => {
+
+          audio.play().then(() => {
+            setAudioError('');
+          }).catch(() => {
             setAudioError(
-              'Audio autoplay blocked. Click the page and allow audio playback.'
+              'Audio playback blocked. Click the page and allow audio playback.'
             );
           });
         }
@@ -124,26 +135,36 @@ export function useProximityAudio({
       };
 
       return pc;
-    };
+    }
 
-    const addPendingCandidates = async (userId, pc) => {
+    async function addPendingCandidates(userId, pc) {
       const pending = pendingCandidatesRef.current.get(userId) || [];
       pendingCandidatesRef.current.delete(userId);
 
       for (const candidate of pending) {
         try {
-          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+          await pc.addIceCandidate(
+            new RTCIceCandidate(candidate)
+          );
         } catch (error) {
           console.error('ICE candidate error:', error);
         }
       }
-    };
+    }
 
-    const handleOffer = async ({
+    async function handleOffer({
       fromUserId,
       description,
-    } = {}) => {
+    } = {}) {
       if (!fromUserId || !description || disposed) return;
+
+      // Ignore offers from users who are no longer nearby.
+      const nearby = latestRef.current.nearbyParticipants || [];
+      const isNearby = nearby.some(
+        (person) => String(person.id) === String(fromUserId)
+      );
+
+      if (!isNearby) return;
 
       const pc = createPeer(fromUserId);
 
@@ -154,22 +175,28 @@ export function useProximityAudio({
 
         await addPendingCandidates(fromUserId, pc);
 
+        if (disposed) return;
+
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
 
-        socket.emit('webrtc:answer', {
-          toUserId: fromUserId,
-          description: pc.localDescription,
-        });
+        if (!disposed && socket.connected) {
+          socket.emit('webrtc:answer', {
+            toUserId: fromUserId,
+            description: pc.localDescription,
+          });
+        }
       } catch (error) {
         console.error('WebRTC offer error:', error);
       }
-    };
+    }
 
-    const handleAnswer = async ({
+    async function handleAnswer({
       fromUserId,
       description,
-    } = {}) => {
+    } = {}) {
+      if (!fromUserId || !description || disposed) return;
+
       const pc = peerConnectionsRef.current.get(fromUserId);
 
       if (!pc || !description) return;
@@ -183,13 +210,13 @@ export function useProximityAudio({
       } catch (error) {
         console.error('WebRTC answer error:', error);
       }
-    };
+    }
 
-    const handleIceCandidate = async ({
+    async function handleIceCandidate({
       fromUserId,
       candidate,
-    } = {}) => {
-      if (!fromUserId || !candidate) return;
+    } = {}) {
+      if (!fromUserId || !candidate || disposed) return;
 
       const pc = peerConnectionsRef.current.get(fromUserId);
 
@@ -203,15 +230,95 @@ export function useProximityAudio({
       }
 
       try {
-        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        await pc.addIceCandidate(
+          new RTCIceCandidate(candidate)
+        );
       } catch (error) {
         console.error('ICE candidate error:', error);
       }
-    };
+    }
 
-    const handleAvatarLeft = ({ id } = {}) => {
-      if (id) closePeer(id);
-    };
+    function handleAvatarLeft({ id } = {}) {
+      if (id) {
+        closePeer(id);
+      }
+    }
+
+    async function syncNearby() {
+      if (disposed || !localStreamRef.current) return;
+
+      const currentUser = latestRef.current.localUser;
+      const nearby = latestRef.current.nearbyParticipants || [];
+
+      if (!currentUser?.id) return;
+
+      const nearbyIds = new Set(
+        nearby
+          .filter(
+            (person) =>
+              person?.id &&
+              String(person.id) !== String(currentUser.id)
+          )
+          .map((person) => String(person.id))
+      );
+
+      // Close connections to avatars that are no longer nearby.
+      for (const userId of peerConnectionsRef.current.keys()) {
+        if (!nearbyIds.has(String(userId))) {
+          closePeer(userId);
+        }
+      }
+
+      // Connect to newly nearby avatars.
+      for (const participant of nearby) {
+        if (
+          disposed ||
+          !participant?.id ||
+          String(participant.id) === String(currentUser.id)
+        ) {
+          continue;
+        }
+
+        const userId = participant.id;
+        const pc = createPeer(userId);
+
+        // Only one side should initiate an offer.
+        const shouldOffer =
+          String(currentUser.id).localeCompare(String(userId)) < 0;
+
+        if (
+          !shouldOffer ||
+          pc.signalingState !== 'stable' ||
+          pc.localDescription ||
+          offersInProgressRef.current.has(userId)
+        ) {
+          continue;
+        }
+
+        offersInProgressRef.current.add(userId);
+
+        try {
+          const offer = await pc.createOffer();
+
+          if (disposed || !socket.connected) continue;
+
+          await pc.setLocalDescription(offer);
+
+          if (!disposed && socket.connected) {
+            socket.emit('webrtc:offer', {
+              toUserId: userId,
+              description: pc.localDescription,
+            });
+          }
+        } catch (error) {
+          console.error('Nearby voice connection error:', error);
+        } finally {
+          offersInProgressRef.current.delete(userId);
+        }
+      }
+    }
+
+    syncNearbyRef.current = syncNearby;
 
     socket.on('webrtc:offer', handleOffer);
     socket.on('webrtc:answer', handleAnswer);
@@ -222,7 +329,7 @@ export function useProximityAudio({
       try {
         if (!navigator.mediaDevices?.getUserMedia) {
           throw new Error(
-            'Microphone access is unavailable. Use localhost or HTTPS.'
+            'Microphone unavailable. Use localhost or HTTPS.'
           );
         }
 
@@ -249,49 +356,29 @@ export function useProximityAudio({
         setMicStatus('ready');
         setAudioError('');
 
-        // Attach microphone tracks to peers created before permission resolved.
+        // Add microphone tracks to any existing peer connections.
         peerConnectionsRef.current.forEach((pc) => {
           const hasAudioSender = pc
             .getSenders()
             .some((sender) => sender.track?.kind === 'audio');
 
           if (!hasAudioSender) {
-            stream.getTracks().forEach((track) => {
+            stream.getAudioTracks().forEach((track) => {
               pc.addTrack(track, stream);
             });
           }
         });
 
-        const currentUser = latestRef.current.localUser;
-        const nearby = latestRef.current.nearbyParticipants || [];
-
-        for (const participant of nearby) {
-          if (!participant?.id || participant.id === currentUser?.id) {
-            continue;
-          }
-
-          const pc = createPeer(participant.id);
-
-          // Only one side creates the initial offer.
-          if (
-            String(currentUser.id).localeCompare(String(participant.id)) < 0 &&
-            !pc.localDescription
-          ) {
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-
-            socket.emit('webrtc:offer', {
-              toUserId: participant.id,
-              description: pc.localDescription,
-            });
-          }
-        }
+        await syncNearbyRef.current?.();
       } catch (error) {
+        if (disposed) return;
+
         console.error('Microphone setup error:', error);
         setMicStatus('error');
+
         setAudioError(
           error?.name === 'NotAllowedError'
-            ? 'Microphone permission denied. Allow microphone access in your browser.'
+            ? 'Microphone permission denied. Allow microphone access in browser settings.'
             : error?.message || 'Unable to start microphone.'
         );
       }
@@ -301,47 +388,69 @@ export function useProximityAudio({
 
     return () => {
       disposed = true;
+      syncNearbyRef.current = null;
 
       socket.off('webrtc:offer', handleOffer);
       socket.off('webrtc:answer', handleAnswer);
       socket.off('webrtc:ice-candidate', handleIceCandidate);
       socket.off('avatar:left', handleAvatarLeft);
 
-      peerConnectionsRef.current.forEach((pc) => pc.close());
+      peerConnectionsRef.current.forEach((pc) => {
+        pc.onicecandidate = null;
+        pc.ontrack = null;
+        pc.onconnectionstatechange = null;
+        pc.close();
+      });
+
       peerConnectionsRef.current.clear();
       pendingCandidatesRef.current.clear();
+      offersInProgressRef.current.clear();
 
       audioElementsRef.current.forEach((audio) => {
         audio.pause();
         audio.srcObject = null;
         audio.remove();
       });
+
       audioElementsRef.current.clear();
 
       localStreamRef.current?.getTracks().forEach((track) => {
         track.stop();
       });
+
       localStreamRef.current = null;
     };
   }, [enabled, localUser?.id, socketRef]);
 
-  // Update mute state without rebuilding all peer connections.
+  // Start or stop outgoing microphone audio when mute changes.
   useEffect(() => {
     localStreamRef.current?.getAudioTracks().forEach((track) => {
       track.enabled = !isMuted;
     });
   }, [isMuted]);
 
-  // Apply proximity-based volume to each remote audio stream.
+  // Synchronize connections whenever the nearby participant list changes.
+  useEffect(() => {
+    syncNearbyRef.current?.();
+  }, [nearbyParticipants, enabled, localUser?.id]);
+
+  // Adjust incoming voice volume according to avatar distance.
   useEffect(() => {
     const local = localUser;
 
     audioElementsRef.current.forEach((audio, userId) => {
       const participant = (participants || []).find(
-        (person) => person.id === userId
+        (person) => String(person.id) === String(userId)
       );
 
-      if (!local || !participant) {
+      if (
+        !local ||
+        !participant ||
+        !Number.isFinite(local.x) ||
+        !Number.isFinite(local.y) ||
+        !Number.isFinite(participant.x) ||
+        !Number.isFinite(participant.y)
+      ) {
         audio.volume = 0;
         return;
       }
@@ -349,13 +458,11 @@ export function useProximityAudio({
       const dx = local.x - participant.x;
       const dy = local.y - participant.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
-      const radius = 100;
 
-      if (distance >= radius) {
-        audio.volume = 0;
-      } else {
-        audio.volume = Math.max(0, Math.min(1, 1 - distance / radius));
-      }
+      audio.volume =
+        distance >= PROXIMITY_RADIUS
+          ? 0
+          : Math.max(0, Math.min(1, 1 - distance / PROXIMITY_RADIUS));
     });
   }, [localUser, participants, nearbyParticipants]);
 
