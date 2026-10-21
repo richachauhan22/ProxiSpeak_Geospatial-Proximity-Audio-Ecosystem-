@@ -82,3 +82,35 @@ describe('WebRTC signaling permission', () => {
     expect(canExchangeWebRTCSignal(null, sender)).toBe(false);
   });
 });
+describe('Invalid position validation', () => {
+  const validUser = {
+    id: 'user-a',
+    officeId: 'main-office',
+    x: 100,
+    y: 100,
+  };
+
+  it('rejects users with missing coordinates', () => {
+    const invalidUser = { ...validUser, x: undefined };
+
+    expect(areUsersNearby(invalidUser, {
+      ...validUser,
+      id: 'user-b',
+    })).toBe(false);
+  });
+
+  it('rejects non-finite coordinates', () => {
+    const invalidUser = { ...validUser, x: NaN };
+
+    expect(areUsersNearby(invalidUser, {
+      ...validUser,
+      id: 'user-b',
+    })).toBe(false);
+  });
+
+  it('returns Infinity for invalid distance inputs', () => {
+    const invalidUser = { ...validUser, y: Infinity };
+
+    expect(getDistance(validUser, invalidUser)).toBe(Infinity);
+  });
+});
