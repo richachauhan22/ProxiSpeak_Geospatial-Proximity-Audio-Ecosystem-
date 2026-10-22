@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import OfficeCanvas from './office/OfficeCanvas';
 import JoinOfficePage from './pages/JoinOfficePage';
 import LandingPage from './pages/LandingPage';
@@ -17,31 +17,47 @@ import {
   QuickToolsModal,
   LeaveConfirmModal,
 } from './components/OfficeModals';
-import { DEFAULT_LOCAL_USER, DEFAULT_OFFICE_PARTICIPANTS } from './office/OfficeMap';
+import {
+  DEFAULT_LOCAL_USER,
+  DEFAULT_OFFICE_PARTICIPANTS,
+} from './office/OfficeMap';
+
+const RTC_CONFIGURATION = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+  ],
+};
 
 function App() {
   const joinRequestRef = useRef(null);
   const localUserRef = useRef(null);
   const joinTimeoutRef = useRef(null);
+  const peerConnectionsRef = useRef(new Map());
+  const localStreamRef = useRef(null);
+  const remoteAudioRef = useRef(new Map());
+  const pendingCandidatesRef = useRef(new Map());
+  const mutedRef = useRef(false);
+  const mountedRef = useRef(true);
 
   const [displayName, setDisplayName] = useState('Mia');
   const [avatarColor, setAvatarColor] = useState('#2563eb');
   const [avatarUrl, setAvatarUrl] = useState('/avatar_mia.png');
   const [officeId, setOfficeId] = useState('oVice HQ / C-03');
-  const [joined, setJoined] = useState(() => window.location.pathname === '/office');
+  const [joined, setJoined] = useState(
+    () => window.location.pathname === '/office',
+  );
   const [localUser, setLocalUser] = useState(() => DEFAULT_LOCAL_USER);
-  const [participants, setParticipants] = useState(() => DEFAULT_OFFICE_PARTICIPANTS);
+  const [participants, setParticipants] = useState(
+    () => DEFAULT_OFFICE_PARTICIPANTS,
+  );
   const [error, setError] = useState('');
   const [proximityMessage, setProximityMessage] = useState('');
   const [isJoining, setIsJoining] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(100);
   const [panPosition, setPanPosition] = useState({ x: 0, y: 0 });
   const [recenterCount, setRecenterCount] = useState(0);
-
-  // Floating reactions
   const [reactions, setReactions] = useState([]);
 
-  // UI Drawers & Modals
   const [chatOpen, setChatOpen] = useState(false);
   const [participantsOpen, setParticipantsOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -52,10 +68,8 @@ function App() {
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
   const [miniMapOpen, setMiniMapOpen] = useState(false);
 
-  // Audio / Video toggles
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOn, setIsVideoOn] = useState(true);
-
   const [page, setPage] = useState(() => {
     if (window.location.pathname === '/office') return 'office';
     if (window.location.pathname === '/join') return 'join';
@@ -68,21 +82,310 @@ function App() {
       if (joinRequestRef.current) emitJoin();
     },
     onDisconnect: () => {
-      if (joinRequestRef.current) setError('Connection lost. Reconnecting to the office…');
+      closeAllPeerConnections();
+      stopLocalAudio();
+      if (joinRequestRef.current) {
+        setError('Connection lost. Reconnecting to the office…');
+      }
     },
     onConnectError: () => {
       setIsJoining(false);
     },
   });
 
-  const navigate = (nextPage) => {
-    const path = nextPage === 'landing' ? '/' : `/${nextPage}`;
-    if (window.location.pathname !== path) window.history.pushState({}, '', path);
-    setPage(nextPage);
-    if (nextPage === 'office') {
+  function emitJoin() {
+    const socket = socketRef.current;
+    const request = joinRequestRef.current;
+
+    if (!socket || !request || !socket.connected) return;
+
+    socket.emit('office:join', {
+      officeId: request.officeId,
+      displayName: request.displayName,
+      avatarColor: request.avatarColor,
+    });
+
+    window.clearTimeout(joinTimeoutRef.current);
+    joinTimeoutRef.current = window.setTimeout(() => {
+      // Keep the existing local demo fallback if the server doesn't respond.
+      setIsJoining(false);
       setJoined(true);
+      setPage('office');
+      if (window.location.pathname !== '/office') {
+        window.history.pushState({}, '', '/office');
+      }
+    }, 1500);
+  }
+
+  function stopLocalAudio() {
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((track) => track.stop());
+      localStreamRef.current = null;
     }
-  };
+  }
+
+  function closePeerConnection(peerId) {
+    const pc = peerConnectionsRef.current.get(peerId);
+
+    if (pc) {
+      pc.onicecandidate = null;
+      pc.ontrack = null;
+      pc.onconnectionstatechange = null;
+      pc.close();
+      peerConnectionsRef.current.delete(peerId);
+    }
+
+    pendingCandidatesRef.current.delete(peerId);
+
+    const audio = remoteAudioRef.current.get(peerId);
+    if (audio) {
+      audio.pause();
+      audio.srcObject = null;
+      remoteAudioRef.current.delete(peerId);
+    }
+  }
+
+  function closeAllPeerConnections() {
+    for (const peerId of [...peerConnectionsRef.current.keys()]) {
+      closePeerConnection(peerId);
+    }
+    pendingCandidatesRef.current.clear();
+  }
+
+  async function ensureLocalAudio() {
+    if (localStreamRef.current) return localStreamRef.current;
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error(
+        'Microphone access is unavailable. Use a supported browser and a secure connection (HTTPS or localhost).',
+      );
+    }
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: false,
+    });
+
+    // The user may have left the office while the permission prompt was open.
+    if (!mountedRef.current || !localUserRef.current?.id) {
+      stream.getTracks().forEach((track) => track.stop());
+      throw new Error('You are no longer connected to the office.');
+    }
+
+    stream.getAudioTracks().forEach((track) => {
+      track.enabled = !mutedRef.current;
+    });
+
+    localStreamRef.current = stream;
+    return stream;
+  }
+
+  const getPeerConnection = useCallback((peerId) => {
+    const existing = peerConnectionsRef.current.get(peerId);
+    if (existing) return existing;
+
+    const pc = new RTCPeerConnection(RTC_CONFIGURATION);
+    peerConnectionsRef.current.set(peerId, pc);
+
+    pc.onicecandidate = (event) => {
+      if (!event.candidate) return;
+
+      const socket = socketRef.current;
+      if (socket?.connected) {
+        socket.emit('webrtc:ice-candidate', {
+          to: peerId,
+          candidate: event.candidate,
+        });
+      }
+    };
+
+    pc.ontrack = (event) => {
+      const stream = event.streams?.[0];
+      if (!stream) return;
+
+      let audio = remoteAudioRef.current.get(peerId);
+      if (!audio) {
+        audio = new Audio();
+        audio.autoplay = true;
+        remoteAudioRef.current.set(peerId, audio);
+      }
+
+      audio.srcObject = stream;
+      audio.play().catch(() => {
+        setProximityMessage(
+          'A nearby voice connection is ready. If you cannot hear audio, interact with the page and check your browser audio settings.',
+        );
+      });
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (
+        pc.connectionState === 'failed' ||
+        pc.connectionState === 'closed'
+      ) {
+        closePeerConnection(peerId);
+      }
+    };
+
+    return pc;
+  }, []);
+
+  async function addLocalTracks(pc) {
+    const stream = await ensureLocalAudio();
+
+    const existingTrackIds = new Set(
+      pc.getSenders()
+        .map((sender) => sender.track?.id)
+        .filter(Boolean),
+    );
+
+    stream.getTracks().forEach((track) => {
+      if (!existingTrackIds.has(track.id)) {
+        pc.addTrack(track, stream);
+      }
+    });
+  }
+
+  async function flushPendingCandidates(peerId, pc) {
+    const queued = pendingCandidatesRef.current.get(peerId) || [];
+    pendingCandidatesRef.current.delete(peerId);
+
+    for (const candidate of queued) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (candidateError) {
+        console.warn('Could not apply queued ICE candidate:', candidateError);
+      }
+    }
+  }
+
+  async function handleProximityEntered(payload) {
+    const peerId = payload?.userId;
+    const peerName = payload?.displayName || 'A teammate';
+    const me = localUserRef.current;
+    const socket = socketRef.current;
+
+    setProximityMessage(`${peerName} is nearby!`);
+
+    // Do not request microphone access in the local demo or before joining
+    // the server-backed office.
+    if (
+      !joined ||
+      !me?.id ||
+      !peerId ||
+      peerId === me.id ||
+      !socket?.connected
+    ) {
+      return;
+    }
+
+    // Both clients receive proximity:entered. Only one should initiate.
+    // This deterministic rule prevents both clients from creating offers.
+    if (String(me.id) > String(peerId)) return;
+
+    try {
+      const pc = getPeerConnection(peerId);
+      await addLocalTracks(pc);
+
+      // Avoid creating a duplicate offer if the connection is already active.
+      if (pc.signalingState !== 'stable') return;
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      socket.emit('webrtc:offer', {
+        to: peerId,
+        description: pc.localDescription,
+      });
+    } catch (audioError) {
+      console.error('Could not start nearby voice:', audioError);
+      setProximityMessage(
+        audioError?.message || 'Could not start microphone audio.',
+      );
+    }
+  }
+
+  async function handleWebRTCOffer(payload) {
+    const peerId = payload?.from;
+    const description = payload?.description;
+    const me = localUserRef.current;
+    const socket = socketRef.current;
+
+    if (
+      !joined ||
+      !me?.id ||
+      !peerId ||
+      !description ||
+      !socket?.connected
+    ) {
+      return;
+    }
+
+    try {
+      const pc = getPeerConnection(peerId);
+      await addLocalTracks(pc);
+      await pc.setRemoteDescription(new RTCSessionDescription(description));
+      await flushPendingCandidates(peerId, pc);
+
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+
+      socket.emit('webrtc:answer', {
+        to: peerId,
+        description: pc.localDescription,
+      });
+    } catch (audioError) {
+      console.error('Could not answer voice offer:', audioError);
+      setProximityMessage(
+        audioError?.message || 'Could not answer the voice connection.',
+      );
+    }
+  }
+
+  async function handleWebRTCAnswer(payload) {
+    const peerId = payload?.from;
+    const description = payload?.description;
+    const pc = peerConnectionsRef.current.get(peerId);
+
+    if (!pc || !description) return;
+
+    try {
+      await pc.setRemoteDescription(new RTCSessionDescription(description));
+      await flushPendingCandidates(peerId, pc);
+    } catch (audioError) {
+      console.error('Could not apply voice answer:', audioError);
+    }
+  }
+
+  async function handleICECandidate(payload) {
+    const peerId = payload?.from;
+    const candidate = payload?.candidate;
+    if (!peerId || !candidate) return;
+
+    const pc = peerConnectionsRef.current.get(peerId);
+    if (!pc || !pc.remoteDescription) {
+      const queued = pendingCandidatesRef.current.get(peerId) || [];
+      queued.push(candidate);
+      pendingCandidatesRef.current.set(peerId, queued);
+      return;
+    }
+
+    try {
+      await pc.addIceCandidate(new RTCIceCandidate(candidate));
+    } catch (candidateError) {
+      console.warn('Could not add ICE candidate:', candidateError);
+    }
+  }
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      window.clearTimeout(joinTimeoutRef.current);
+      closeAllPeerConnections();
+      stopLocalAudio();
+    };
+  }, []);
 
   useEffect(() => {
     localUserRef.current = localUser;
@@ -95,6 +398,7 @@ function App() {
     const handleJoined = ({ user, participants: officeUsers }) => {
       window.clearTimeout(joinTimeoutRef.current);
       setIsJoining(false);
+
       const mergedUser = {
         ...DEFAULT_LOCAL_USER,
         ...user,
@@ -103,52 +407,74 @@ function App() {
         avatarColor: user.avatarColor || avatarColor,
         ringColor: user.avatarColor || avatarColor,
       };
+
       localUserRef.current = mergedUser;
       setLocalUser(mergedUser);
 
-      // Merge real participants with default screenshot teammates
       const userMap = new Map();
-      DEFAULT_OFFICE_PARTICIPANTS.forEach((p) => userMap.set(p.id, p));
-      (officeUsers || []).forEach((p) => {
-        if (p.id !== user.id) userMap.set(p.id, p);
+      DEFAULT_OFFICE_PARTICIPANTS.forEach((person) => {
+        userMap.set(person.id, person);
       });
-      setParticipants([...userMap.values()]);
+      (officeUsers || []).forEach((person) => {
+        if (person.id !== user.id) userMap.set(person.id, person);
+      });
 
+      setParticipants([...userMap.values()]);
       setJoined(true);
       setPage('office');
-      if (window.location.pathname !== '/office') window.history.pushState({}, '', '/office');
+
+      if (window.location.pathname !== '/office') {
+        window.history.pushState({}, '', '/office');
+      }
+
       setError('');
     };
 
     const handleAvatarJoined = (user) => {
       setParticipants((current) => {
-        const existing = current.find((member) => member.id === user.id);
-        if (existing) return current;
+        if (current.some((member) => member.id === user.id)) return current;
         return [...current, { ...user }];
       });
     };
 
     const handleAvatarLeft = ({ id }) => {
-      setParticipants((current) => current.filter((member) => member.id !== id));
+      setParticipants((current) =>
+        current.filter((member) => member.id !== id),
+      );
+
+      closePeerConnection(id);
+
       const currentUser = localUserRef.current;
       if (currentUser && currentUser.id === id) {
+        closeAllPeerConnections();
+        stopLocalAudio();
         localUserRef.current = null;
         setJoined(false);
         joinRequestRef.current = null;
         setPage('landing');
-        if (window.location.pathname !== '/') window.history.pushState({}, '', '/');
+
+        if (window.location.pathname !== '/') {
+          window.history.pushState({}, '', '/');
+        }
       }
     };
 
     const handleAvatarMove = (payload) => {
       setParticipants((current) =>
         current.map((member) =>
-          member.id === payload.id ? { ...member, x: payload.x, y: payload.y } : member,
+          member.id === payload.id
+            ? { ...member, x: payload.x, y: payload.y }
+            : member,
         ),
       );
+
       const currentUser = localUserRef.current;
       if (currentUser && currentUser.id === payload.id) {
-        const nextUser = { ...currentUser, x: payload.x, y: payload.y };
+        const nextUser = {
+          ...currentUser,
+          x: payload.x,
+          y: payload.y,
+        };
         localUserRef.current = nextUser;
         setLocalUser(nextUser);
       }
@@ -163,31 +489,27 @@ function App() {
     };
 
     const handleOfficeLeft = () => {
+      closeAllPeerConnections();
+      stopLocalAudio();
       setJoined(false);
       joinRequestRef.current = null;
       setPage('landing');
-      if (window.location.pathname !== '/') window.history.pushState({}, '', '/');
+
+      if (window.location.pathname !== '/') {
+        window.history.pushState({}, '', '/');
+      }
     };
 
-    socket.on('office:joined', handleJoined);
-    socket.on('avatar:joined', handleAvatarJoined);
-    socket.on('avatar:left', handleAvatarLeft);
-    socket.on('avatar:move', handleAvatarMove);
-    
+    const handleProximityLeft = ({ userId } = {}) => {
+      if (userId) closePeerConnection(userId);
+      setProximityMessage('Your teammate moved out of hearing range.');
+    };
 
-    const handleProximityEntered = ({ displayName }) => {
-  setProximityMessage(`${displayName} is nearby!`);
-};
-
-const handleProximityLeft = () => {
-  setProximityMessage('Your teammate moved out of hearing range.');
-};
-
-socket.on('proximity:entered', handleProximityEntered);
-socket.on('proximity:left', handleProximityLeft);
-
-    socket.on('error', handleError);
-    socket.on('office:left', handleOfficeLeft);
+    const handleWebRTCError = (payload) => {
+      setProximityMessage(
+        payload?.message || 'The voice connection could not be established.',
+      );
+    };
 
     const handlePopState = () => {
       if (window.location.pathname === '/office' || joined) {
@@ -196,6 +518,19 @@ socket.on('proximity:left', handleProximityLeft);
         setPage(window.location.pathname === '/join' ? 'join' : 'landing');
       }
     };
+
+    socket.on('office:joined', handleJoined);
+    socket.on('avatar:joined', handleAvatarJoined);
+    socket.on('avatar:left', handleAvatarLeft);
+    socket.on('avatar:move', handleAvatarMove);
+    socket.on('proximity:entered', handleProximityEntered);
+    socket.on('proximity:left', handleProximityLeft);
+    socket.on('webrtc:offer', handleWebRTCOffer);
+    socket.on('webrtc:answer', handleWebRTCAnswer);
+    socket.on('webrtc:ice-candidate', handleICECandidate);
+    socket.on('webrtc:error', handleWebRTCError);
+    socket.on('error', handleError);
+    socket.on('office:left', handleOfficeLeft);
     window.addEventListener('popstate', handlePopState);
 
     return () => {
@@ -207,40 +542,35 @@ socket.on('proximity:left', handleProximityLeft);
       socket.off('avatar:move', handleAvatarMove);
       socket.off('proximity:entered', handleProximityEntered);
       socket.off('proximity:left', handleProximityLeft);
+      socket.off('webrtc:offer', handleWebRTCOffer);
+      socket.off('webrtc:answer', handleWebRTCAnswer);
+      socket.off('webrtc:ice-candidate', handleICECandidate);
+      socket.off('webrtc:error', handleWebRTCError);
       socket.off('error', handleError);
       socket.off('office:left', handleOfficeLeft);
     };
   }, [joined, displayName, avatarUrl, avatarColor]);
 
-  const emitJoin = () => {
-    const socket = socketRef.current;
-    const joinRequest = joinRequestRef.current;
-    if (!socket || !joinRequest) return;
-
-    socket.emit('office:join', {
-      officeId: joinRequest.officeId,
-      displayName: joinRequest.displayName,
-      avatarColor: joinRequest.avatarColor,
-    });
-
-    window.clearTimeout(joinTimeoutRef.current);
-    joinTimeoutRef.current = window.setTimeout(() => {
-      // Local interactive fallback
-      setIsJoining(false);
-      setJoined(true);
-      setPage('office');
-      if (window.location.pathname !== '/office') window.history.pushState({}, '', '/office');
-    }, 1500);
+  const navigate = (nextPage) => {
+    const path = nextPage === 'landing' ? '/' : `/${nextPage}`;
+    if (window.location.pathname !== path) {
+      window.history.pushState({}, '', path);
+    }
+    setPage(nextPage);
+    if (nextPage === 'office') setJoined(true);
   };
 
   const handleJoinOffice = () => {
     setError('');
+
     const normalizedName = displayName.trim();
     const normalizedOfficeId = officeId.trim();
+
     if (normalizedName.length < 2 || normalizedName.length > 24) {
       setError('Display name must be 2-24 characters long.');
       return;
     }
+
     if (normalizedOfficeId.length < 2 || normalizedOfficeId.length > 48) {
       setError('Office ID must be 2-48 characters long.');
       return;
@@ -265,10 +595,13 @@ socket.on('proximity:left', handleProximityLeft);
 
     const socket = socketRef.current;
     if (!socket || !socket.connected) {
+      // Demo mode: no microphone or real WebRTC connection.
       setJoined(true);
       setPage('office');
       setIsJoining(false);
-      if (window.location.pathname !== '/office') window.history.pushState({}, '', '/office');
+      if (window.location.pathname !== '/office') {
+        window.history.pushState({}, '', '/office');
+      }
       return;
     }
 
@@ -276,6 +609,9 @@ socket.on('proximity:left', handleProximityLeft);
   };
 
   const handleInstantDemo = () => {
+    closeAllPeerConnections();
+    stopLocalAudio();
+
     const demoUser = {
       ...DEFAULT_LOCAL_USER,
       displayName: displayName || 'Mia',
@@ -283,18 +619,25 @@ socket.on('proximity:left', handleProximityLeft);
       ringColor: avatarColor || '#2563eb',
       photoUrl: avatarUrl || '/avatar_mia.png',
     };
+
     setLocalUser(demoUser);
     localUserRef.current = demoUser;
+    joinRequestRef.current = null;
     setJoined(true);
     navigate('office');
   };
 
   const handleLeaveOffice = () => {
-    if (socketRef.current?.connected) {
+    if (socketRef.current?.connected && localUserRef.current?.id) {
       socketRef.current.emit('office:leave', { officeId });
     }
-    setJoined(false);
+
+    closeAllPeerConnections();
+    stopLocalAudio();
+    localUserRef.current = null;
     joinRequestRef.current = null;
+    setJoined(false);
+    setProximityMessage('');
     navigate('landing');
   };
 
@@ -310,35 +653,61 @@ socket.on('proximity:left', handleProximityLeft);
 
     localUserRef.current = nextUser;
     setLocalUser(nextUser);
+
     setParticipants((current) =>
-      current.map((member) => (member.id === nextUser.id ? { ...member, x: nextPosition.x, y: nextPosition.y } : member)),
+      current.map((member) =>
+        member.id === nextUser.id
+          ? { ...member, x: nextPosition.x, y: nextPosition.y }
+          : member,
+      ),
     );
+
     if (socketRef.current?.connected) {
-      socketRef.current.emit('office:move', { officeId, x: nextPosition.x, y: nextPosition.y });
+      socketRef.current.emit('office:move', {
+        officeId,
+        x: nextPosition.x,
+        y: nextPosition.y,
+      });
     }
   };
 
   const handleToggleMute = () => {
-    setIsMuted((prev) => {
-      const next = !prev;
-      setLocalUser((curr) => ({
-        ...curr,
+    setIsMuted((previous) => {
+      const next = !previous;
+      mutedRef.current = next;
+
+      localStreamRef.current?.getAudioTracks().forEach((track) => {
+        track.enabled = !next;
+      });
+
+      setLocalUser((current) => ({
+        ...current,
         isMuted: next,
         isSpeaking: !next,
       }));
+
       return next;
     });
   };
 
   const handleToggleVideo = () => {
-    setIsVideoOn((prev) => !prev);
+    setIsVideoOn((previous) => !previous);
   };
 
   const handleReaction = (emoji) => {
     const id = Date.now() + Math.random();
-    setReactions((prev) => [...prev, { id, emoji, x: localUser?.x || 554, y: localUser?.y || 164 }]);
-    setTimeout(() => {
-      setReactions((prev) => prev.filter((r) => r.id !== id));
+    setReactions((previous) => [
+      ...previous,
+      {
+        id,
+        emoji,
+        x: localUser?.x || 554,
+        y: localUser?.y || 164,
+      },
+    ]);
+
+    window.setTimeout(() => {
+      setReactions((previous) => previous.filter((reaction) => reaction.id !== id));
     }, 2400);
   };
 
@@ -348,7 +717,11 @@ socket.on('proximity:left', handleProximityLeft);
         <LandingPage
           onEnter={() => navigate('join')}
           onDirectOffice={handleInstantDemo}
-          onExplore={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}
+          onExplore={() =>
+            document.getElementById('features')?.scrollIntoView({
+              behavior: 'smooth',
+            })
+          }
         />
       ) : page === 'join' && !joined ? (
         <JoinOfficePage
@@ -367,16 +740,16 @@ socket.on('proximity:left', handleProximityLeft);
           loading={isJoining}
         />
       ) : (
-        /* ================= VIRTUAL OFFICE WORKSPACE ================= */
         <div className="ovice-office-container">
-          {/* 1. Header (Navbar) */}
           <OviceHeader
             officeId={officeId}
             participantCount={participants.length + (localUser ? 1 : 0)}
-            connectionStatus={connectionStatus === 'connected' ? 'Fast' : connectionStatus}
+            connectionStatus={
+              connectionStatus === 'connected' ? 'Fast' : connectionStatus
+            }
             onToggleMenu={() => setSettingsOpen(true)}
-            onToggleParticipants={() => setParticipantsOpen((prev) => !prev)}
-            onToggleChat={() => setChatOpen((prev) => !prev)}
+            onToggleParticipants={() => setParticipantsOpen((previous) => !previous)}
+            onToggleChat={() => setChatOpen((previous) => !previous)}
             onToggleCalendar={() => setCalendarOpen(true)}
             onToggleNotifications={() => setNotificationsOpen(true)}
             onOpenHelp={() => setHelpOpen(true)}
@@ -385,32 +758,47 @@ socket.on('proximity:left', handleProximityLeft);
             participantsOpen={participantsOpen}
           />
 
-          {/* 2. Main Floor Workspace */}
           <main className="ovice-main-viewport">
-            {/* Left Floating Floor Selector Widget (6F) */}
             <FloorSelector currentFloor={6} />
 
-            
-{proximityMessage && (
-  <div
-    style={{
-      position: 'absolute',
-      top: '70px',
-      left: '50%',
-      transform: 'translateX(-50%)',
-      background: '#2563eb',
-      color: 'white',
-      padding: '10px 16px',
-      borderRadius: '8px',
-      zIndex: 1000,
-    }}
-  >
-    {proximityMessage}
-  </div>
-)}
+            {proximityMessage && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '70px',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  background: '#2563eb',
+                  color: 'white',
+                  padding: '10px 16px',
+                  borderRadius: '8px',
+                  zIndex: 1000,
+                }}
+              >
+                {proximityMessage}
+              </div>
+            )}
 
+            {error && (
+              <div
+                role="alert"
+                style={{
+                  position: 'absolute',
+                  top: '120px',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  background: '#991b1b',
+                  color: 'white',
+                  padding: '10px 16px',
+                  borderRadius: '8px',
+                  zIndex: 1000,
+                  maxWidth: '90%',
+                }}
+              >
+                {error}
+              </div>
+            )}
 
-            {/* Virtual Office Floor Canvas */}
             <OfficeCanvas
               localUser={localUser}
               participants={participants}
@@ -422,21 +810,19 @@ socket.on('proximity:left', handleProximityLeft);
               recenterTrigger={recenterCount}
             />
 
-            {/* Floating Emojis */}
-            {reactions.map((r) => (
+            {reactions.map((reaction) => (
               <div
-                key={r.id}
+                key={reaction.id}
                 className="floating-emoji"
                 style={{
-                  left: `calc(50% + ${(r.x - 720) * (zoomLevel / 100) + panPosition.x}px)`,
-                  top: `calc(50% + ${(r.y - 447) * (zoomLevel / 100) + panPosition.y}px)`,
+                  left: `calc(50% + ${(reaction.x - 720) * (zoomLevel / 100) + panPosition.x}px)`,
+                  top: `calc(50% + ${(reaction.y - 447) * (zoomLevel / 100) + panPosition.y}px)`,
                 }}
               >
-                {r.emoji}
+                {reaction.emoji}
               </div>
             ))}
 
-            {/* Radar Mini-map Overlay */}
             <MiniMapOverlay
               isOpen={miniMapOpen}
               onClose={() => setMiniMapOpen(false)}
@@ -445,12 +831,11 @@ socket.on('proximity:left', handleProximityLeft);
               onTeleport={(x, y) => handleLocalMove({ x, y })}
             />
 
-            {/* Bottom Floating Controls Toolbar */}
             <BottomToolbar
               localUser={localUser}
               zoomLevel={zoomLevel}
-              onZoomChange={(next) => setZoomLevel(next)}
-              onRecenter={() => setRecenterCount((c) => c + 1)}
+              onZoomChange={setZoomLevel}
+              onRecenter={() => setRecenterCount((count) => count + 1)}
               onToggleMute={handleToggleMute}
               onToggleVideo={handleToggleVideo}
               isMuted={isMuted}
@@ -458,19 +843,19 @@ socket.on('proximity:left', handleProximityLeft);
               onReaction={handleReaction}
               onOpenSettings={() => setSettingsOpen(true)}
               onOpenAddMenu={() => setToolsOpen(true)}
-              onToggleMiniMap={() => setMiniMapOpen((prev) => !prev)}
+              onToggleMiniMap={() => setMiniMapOpen((previous) => !previous)}
               onLeaveOffice={() => setLeaveConfirmOpen(true)}
               onOpenHelp={() => setHelpOpen(true)}
               miniMapOpen={miniMapOpen}
             />
 
-            {/* Side Drawers */}
             <ChatDrawer
               isOpen={chatOpen}
               onClose={() => setChatOpen(false)}
               officeId={officeId}
               localUser={localUser}
             />
+
             <ParticipantsDrawer
               isOpen={participantsOpen}
               onClose={() => setParticipantsOpen(false)}
@@ -478,16 +863,24 @@ socket.on('proximity:left', handleProximityLeft);
               localUser={localUser}
             />
 
-            {/* Modals */}
-            <CalendarModal isOpen={calendarOpen} onClose={() => setCalendarOpen(false)} />
-            <NotificationsModal isOpen={notificationsOpen} onClose={() => setNotificationsOpen(false)} />
+            <CalendarModal
+              isOpen={calendarOpen}
+              onClose={() => setCalendarOpen(false)}
+            />
+            <NotificationsModal
+              isOpen={notificationsOpen}
+              onClose={() => setNotificationsOpen(false)}
+            />
             <SettingsModal
               isOpen={settingsOpen}
               onClose={() => setSettingsOpen(false)}
               onLeaveOffice={() => setLeaveConfirmOpen(true)}
             />
             <HelpModal isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
-            <QuickToolsModal isOpen={toolsOpen} onClose={() => setToolsOpen(false)} />
+            <QuickToolsModal
+              isOpen={toolsOpen}
+              onClose={() => setToolsOpen(false)}
+            />
             <LeaveConfirmModal
               isOpen={leaveConfirmOpen}
               onClose={() => setLeaveConfirmOpen(false)}

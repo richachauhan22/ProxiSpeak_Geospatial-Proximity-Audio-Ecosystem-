@@ -1,11 +1,12 @@
 import { io } from 'socket.io-client';
 
 export function createSocketClient() {
-  const socketUrl = import.meta.env.VITE_SOCKET_URL || window.location.origin;
+  const socketUrl = import.meta.env.VITE_SOCKET_URL || 'http://localhost:4000';
+
   return io(socketUrl, {
-    autoConnect: false,
+    autoConnect: true,
     reconnection: true,
     reconnectionAttempts: Infinity,
-    transports: ['websocket'],
+    transports: ['websocket', 'polling'],
   });
 }

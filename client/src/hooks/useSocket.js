@@ -12,20 +12,27 @@ export function useSocket({ onConnect, onDisconnect, onConnectError } = {}) {
     socketRef.current = socket;
 
     const handleConnect = () => {
+      console.log('[Socket] Connected to server on port 4000!');
       setConnectionStatus('connected');
       callbacksRef.current.onConnect?.();
     };
+
     const handleDisconnect = (reason) => {
+      console.log('[Socket] Disconnected:', reason);
       setConnectionStatus(socket.active ? 'reconnecting' : 'disconnected');
       callbacksRef.current.onDisconnect?.(reason);
     };
+
     const handleConnection = (payload) => {
       if (payload?.status === 'connected') setConnectionStatus('connected');
     };
+
     const handleConnectError = (error) => {
+      console.error('[Socket] Connection error:', error.message);
       setConnectionStatus('error');
       callbacksRef.current.onConnectError?.(error);
     };
+
     const handleReconnectAttempt = () => setConnectionStatus('reconnecting');
 
     socket.on('connect', handleConnect);
@@ -33,6 +40,10 @@ export function useSocket({ onConnect, onDisconnect, onConnectError } = {}) {
     socket.on('connection', handleConnection);
     socket.on('connect_error', handleConnectError);
     socket.io.on('reconnect_attempt', handleReconnectAttempt);
+
+    if (!socket.connected) {
+      socket.connect();
+    }
 
     return () => {
       socket.off('connect', handleConnect);

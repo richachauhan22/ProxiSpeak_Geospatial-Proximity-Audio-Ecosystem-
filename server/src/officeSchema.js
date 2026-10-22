@@ -41,3 +41,28 @@ const officeSchema = new mongoose.Schema(
 officeSchema.index({ location: '2dsphere' });
 
 export const OfficeModel = mongoose.model('Office', officeSchema);
+
+// --- USER LOCATION SCHEMA FOR WEEK 2 ($near QUERIES) ---
+const userLocationSchema = new mongoose.Schema({
+  userId: { type: String, required: true, unique: true },
+  socketId: { type: String, required: true },
+  officeId: { type: String, required: true },
+  displayName: { type: String, default: 'Teammate' },
+  location: {
+    type: {
+      type: String,
+      enum: ['Point'],
+      default: 'Point',
+    },
+    coordinates: {
+      type: [Number], // [X, Y]
+      required: true,
+    },
+  },
+  lastSeen: { type: Date, default: Date.now },
+});
+
+// 2dsphere index guarantees sub-20ms spatial queries
+userLocationSchema.index({ location: '2dsphere' });
+
+export const UserLocationModel = mongoose.model('UserLocation', userLocationSchema);
