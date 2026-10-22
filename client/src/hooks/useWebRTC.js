@@ -1,10 +1,24 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { WebRTCManager } from '../services/webrtcManager';
 
+export const WEBRTC_PROXIMITY_RADIUS = 100;
+
+export function isWithinProximity(pos1, pos2, radius = WEBRTC_PROXIMITY_RADIUS) {
+  if (!pos1 || !pos2) return false;
+  const x1 = Number(pos1.x);
+  const y1 = Number(pos1.y);
+  const x2 = Number(pos2.x);
+  const y2 = Number(pos2.y);
+  if (!Number.isFinite(x1) || !Number.isFinite(y1) || !Number.isFinite(x2) || !Number.isFinite(y2)) {
+    return true;
+  }
+  return Math.hypot(x1 - x2, y1 - y2) <= radius;
+}
+
 /**
  * useWebRTC Hook
  * Coordinates browser getUserMedia, WebRTC peer connections, socket signaling,
- * voice activity detection, and 2D spatial audio falloff.
+ * voice activity detection, 100-pixel proximity gating, and 2D spatial audio falloff.
  */
 export function useWebRTC({
   socketRef,
@@ -30,6 +44,9 @@ export function useWebRTC({
   const participantsRef = useRef(participants);
   participantsRef.current = participants;
 
+  const spatialConfigRef = useRef(spatialConfig);
+  spatialConfigRef.current = spatialConfig;
+
   // Initialize WebRTCManager instance
   useEffect(() => {
     const manager = new WebRTCManager({
@@ -38,6 +55,20 @@ export function useWebRTC({
       onSignal: ({ type, targetId, offer, answer, candidate }) => {
         const socket = socketRef?.current;
         if (!socket || !socket.connected) return;
+
+        // Week 2 requirement: Only send WebRTC offer/answers to users within 100-pixel radius
+        if (type === 'offer' || type === 'answer') {
+          const currentLocal = localUserRef.current;
+          const targetPeer = (participantsRef.current || []).find((p) => p.id === targetId);
+          const limit = spatialConfigRef.current?.proximityRadius ?? WEBRTC_PROXIMITY_RADIUS;
+
+          if (currentLocal && targetPeer && !isWithinProximity(currentLocal, targetPeer, limit)) {
+            console.warn(
+              `[WebRTC] Suppressed outgoing ${type} to ${targetId}: peer is outside ${limit}px proximity radius`,
+            );
+            return;
+          }
+        }
 
         if (type === 'offer') {
           socket.emit('webrtc:offer', { targetId, offer });
@@ -172,14 +203,20 @@ export function useWebRTC({
       }
     };
 
+    const handleProximityError = (payload) => {
+      console.warn('[WebRTC Proximity]', payload?.message || payload);
+    };
+
     socket.on('webrtc:offer', handleOffer);
     socket.on('webrtc:answer', handleAnswer);
     socket.on('webrtc:ice-candidate', handleCandidate);
+    socket.on('webrtc:proximity-error', handleProximityError);
 
     return () => {
       socket.off('webrtc:offer', handleOffer);
       socket.off('webrtc:answer', handleAnswer);
       socket.off('webrtc:ice-candidate', handleCandidate);
+      socket.off('webrtc:proximity-error', handleProximityError);
     };
   }, [socketRef, enabled]);
 
@@ -189,10 +226,18 @@ export function useWebRTC({
 
     const manager = managerRef.current;
     const myId = localUser.id;
+    const proximityLimit = spatialConfig?.proximityRadius;
 
-    // Connect to each participant in the room
+    // Connect to each participant in the room (gated by proximity if specified)
     participants.forEach((peer) => {
       if (!peer.id || peer.id === myId) return;
+
+      if (proximityLimit && !isWithinProximity(localUser, peer, proximityLimit)) {
+        if (manager.peers.has(peer.id)) {
+          manager.removePeer(peer.id);
+        }
+        return;
+      }
 
       if (!manager.peers.has(peer.id)) {
         // Deterministic initiator: user with lexicographically smaller ID initiates
@@ -208,7 +253,7 @@ export function useWebRTC({
         manager.removePeer(peerId);
       }
     }
-  }, [enabled, participants, localUser?.id]);
+  }, [enabled, participants, localUser?.id, localUser?.x, localUser?.y, spatialConfig?.proximityRadius]);
 
   // Continuously synchronize spatial audio based on positions
   useEffect(() => {

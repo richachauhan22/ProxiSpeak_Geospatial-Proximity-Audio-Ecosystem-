@@ -6,6 +6,13 @@ import { randomUUID } from 'node:crypto';
 import { Server } from 'socket.io';
 import { config } from './config.js';
 import { OfficeModel } from './officeSchema.js';
+import {
+  UserLocationModel,
+  queryNearbyUsers,
+  groupUsersByProximity,
+} from './userLocationSchema.js';
+
+export const WEBRTC_PROXIMITY_RADIUS = 100;
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -80,6 +87,44 @@ function getRoomMembers(officeId) {
   }));
 }
 
+async function syncUserLocation(user) {
+  if (!dbState.connected) return;
+  try {
+    await UserLocationModel.findOneAndUpdate(
+      { officeId: user.officeId, userId: user.id },
+      {
+        userId: user.id,
+        socketId: user.socketId,
+        officeId: user.officeId,
+        displayName: user.displayName,
+        avatarColor: user.avatarColor,
+        position: [user.x, user.y],
+        location: {
+          type: 'Point',
+          coordinates: [user.x, user.y],
+        },
+        lastMoved: new Date(),
+      },
+      {
+        upsert: true,
+        new: true,
+        setDefaultsOnInsert: true,
+      },
+    );
+  } catch (error) {
+    logInfo('User location sync to MongoDB failed', { error: error.message });
+  }
+}
+
+async function removeUserLocation(officeId, userId) {
+  if (!dbState.connected) return;
+  try {
+    await UserLocationModel.deleteOne({ officeId, userId });
+  } catch (error) {
+    logInfo('User location removal from MongoDB failed', { error: error.message });
+  }
+}
+
 async function ensureOfficeSeed() {
   if (!dbState.connected) {
     return;
@@ -137,6 +182,8 @@ function detachUser(socketId) {
     return;
   }
 
+  removeUserLocation(previous.officeId, previous.id);
+
   const room = activeRooms.get(previous.officeId);
 
   if (room) {
@@ -179,6 +226,51 @@ app.get('/api/offices/:officeId', (_req, res) => {
   });
 });
 
+// Week 2 REST API: MongoDB $near query to find users within specified radius
+app.get('/api/offices/:officeId/nearby', async (req, res) => {
+  const officeId = req.params.officeId || config.officeId;
+  const x = Number(req.query.x || 0);
+  const y = Number(req.query.y || 0);
+  const radius = Number(req.query.radius || WEBRTC_PROXIMITY_RADIUS);
+
+  const inMemory = getRoomMembers(officeId);
+  const nearby = await queryNearbyUsers({
+    officeId,
+    x,
+    y,
+    radius,
+    inMemoryUsers: inMemory,
+  });
+
+  res.json({
+    officeId,
+    center: { x, y },
+    radius,
+    count: nearby.length,
+    users: nearby,
+  });
+});
+
+// Week 2 REST API: Group office users into proximity clusters via $near calculations
+app.get('/api/offices/:officeId/groups', async (req, res) => {
+  const officeId = req.params.officeId || config.officeId;
+  const radius = Number(req.query.radius || WEBRTC_PROXIMITY_RADIUS);
+  const inMemory = getRoomMembers(officeId);
+
+  const groups = await groupUsersByProximity({
+    officeId,
+    radius,
+    inMemoryUsers: inMemory,
+  });
+
+  res.json({
+    officeId,
+    radius,
+    groupCount: groups.length,
+    groups,
+  });
+});
+
 io.on('connection', (socket) => {
   logInfo('Client connected', { socketId: socket.id });
   socket.emit('connection', {
@@ -186,7 +278,7 @@ io.on('connection', (socket) => {
     socketId: socket.id,
   });
 
-  socket.on('office:join', (payload) => {
+  socket.on('office:join', async (payload) => {
     const rawOfficeId = payload?.officeId || config.officeId;
     const officeId = String(rawOfficeId).trim();
 
@@ -220,6 +312,9 @@ io.on('connection', (socket) => {
     activeRooms.set(officeId, room);
     activeUsers.set(socket.id, user);
     socket.join(officeId);
+
+    // Sync to MongoDB for $near geospatial indexing
+    syncUserLocation(user);
 
     logInfo('User joined office', {
       socketId: socket.id,
@@ -262,6 +357,9 @@ io.on('connection', (socket) => {
     user.x = nextPosition.x;
     user.y = nextPosition.y;
 
+    // Sync position update to MongoDB
+    syncUserLocation(user);
+
     socket.to(officeId).emit('avatar:move', {
       id: user.id,
       displayName: user.displayName,
@@ -270,6 +368,29 @@ io.on('connection', (socket) => {
       y: user.y,
       officeId,
     });
+  });
+
+  socket.on('office:nearby', async (payload, callback) => {
+    const user = activeUsers.get(socket.id);
+    const officeId = user?.officeId || payload?.officeId || config.officeId;
+    const x = Number(payload?.x ?? user?.x ?? 0);
+    const y = Number(payload?.y ?? user?.y ?? 0);
+    const radius = Number(payload?.radius || WEBRTC_PROXIMITY_RADIUS);
+
+    const inMemory = getRoomMembers(officeId);
+    const nearby = await queryNearbyUsers({
+      officeId,
+      x,
+      y,
+      radius,
+      inMemoryUsers: inMemory,
+    });
+
+    if (typeof callback === 'function') {
+      callback({ nearby });
+    } else {
+      socket.emit('office:nearby', { nearby });
+    }
   });
 
   socket.on('office:leave', (payload) => {
@@ -295,17 +416,36 @@ io.on('connection', (socket) => {
     socket.emit('office:left', { officeId: targetOfficeId });
   });
 
+  // Week 2: Logic to only send WebRTC offer/answers to users within a 100-pixel radius
   socket.on('webrtc:offer', (payload) => {
     const user = activeUsers.get(socket.id);
     if (!user) return;
     const targetId = payload?.targetId;
     const target = [...activeUsers.values()].find((u) => u.id === targetId || u.socketId === targetId);
-    if (target) {
-      io.to(target.socketId).emit('webrtc:offer', {
+    if (!target) return;
+
+    // Calculate 2D Euclidean distance
+    const distance = Math.hypot(user.x - target.x, user.y - target.y);
+    if (distance > WEBRTC_PROXIMITY_RADIUS) {
+      logInfo('WebRTC offer suppressed: target outside 100px radius', {
         senderId: user.id,
-        offer: payload.offer,
+        targetId: target.id,
+        distance: Number(distance.toFixed(2)),
+        limit: WEBRTC_PROXIMITY_RADIUS,
       });
+      socket.emit('webrtc:proximity-error', {
+        type: 'offer_rejected',
+        targetId: target.id,
+        distance: Number(distance.toFixed(2)),
+        message: 'Cannot send WebRTC offer: peer is outside the 100-pixel proximity radius.',
+      });
+      return;
     }
+
+    io.to(target.socketId).emit('webrtc:offer', {
+      senderId: user.id,
+      offer: payload.offer,
+    });
   });
 
   socket.on('webrtc:answer', (payload) => {
@@ -313,12 +453,30 @@ io.on('connection', (socket) => {
     if (!user) return;
     const targetId = payload?.targetId;
     const target = [...activeUsers.values()].find((u) => u.id === targetId || u.socketId === targetId);
-    if (target) {
-      io.to(target.socketId).emit('webrtc:answer', {
+    if (!target) return;
+
+    // Calculate 2D Euclidean distance
+    const distance = Math.hypot(user.x - target.x, user.y - target.y);
+    if (distance > WEBRTC_PROXIMITY_RADIUS) {
+      logInfo('WebRTC answer suppressed: target outside 100px radius', {
         senderId: user.id,
-        answer: payload.answer,
+        targetId: target.id,
+        distance: Number(distance.toFixed(2)),
+        limit: WEBRTC_PROXIMITY_RADIUS,
       });
+      socket.emit('webrtc:proximity-error', {
+        type: 'answer_rejected',
+        targetId: target.id,
+        distance: Number(distance.toFixed(2)),
+        message: 'Cannot send WebRTC answer: peer is outside the 100-pixel proximity radius.',
+      });
+      return;
     }
+
+    io.to(target.socketId).emit('webrtc:answer', {
+      senderId: user.id,
+      answer: payload.answer,
+    });
   });
 
   socket.on('webrtc:ice-candidate', (payload) => {
@@ -326,12 +484,18 @@ io.on('connection', (socket) => {
     if (!user) return;
     const targetId = payload?.targetId;
     const target = [...activeUsers.values()].find((u) => u.id === targetId || u.socketId === targetId);
-    if (target) {
-      io.to(target.socketId).emit('webrtc:ice-candidate', {
-        senderId: user.id,
-        candidate: payload.candidate,
-      });
+    if (!target) return;
+
+    // Only relay ICE candidates if peers are within proximity radius
+    const distance = Math.hypot(user.x - target.x, user.y - target.y);
+    if (distance > WEBRTC_PROXIMITY_RADIUS) {
+      return;
     }
+
+    io.to(target.socketId).emit('webrtc:ice-candidate', {
+      senderId: user.id,
+      candidate: payload.candidate,
+    });
   });
 
   socket.on('disconnect', () => {

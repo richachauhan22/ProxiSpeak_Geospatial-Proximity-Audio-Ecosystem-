@@ -106,6 +106,7 @@ function App() {
     enabled: isOfficeActive,
     spatialConfig: {
       maxDistance: proximityDistance,
+      proximityRadius: 100,
     },
   });
 

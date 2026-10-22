@@ -390,7 +390,14 @@ export class WebRTCManager {
       }
       if (audio) {
         audio.srcObject = stream;
-        audio.play().catch(() => {});
+        try {
+          const playPromise = audio.play();
+          if (playPromise && typeof playPromise.catch === 'function') {
+            playPromise.catch(() => {});
+          }
+        } catch (_e) {
+          // Play prevented or running in non-media environment
+        }
       }
 
       // Web Audio spatial graph

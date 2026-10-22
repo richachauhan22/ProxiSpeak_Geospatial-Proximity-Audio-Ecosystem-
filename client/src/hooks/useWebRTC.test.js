@@ -316,4 +316,71 @@ describe('useWebRTC React Hook', () => {
 
     expect(updateSpatialSpy).toHaveBeenCalledWith(localUser, participants);
   });
+
+  it('only sends WebRTC offer/answers to users within 100-pixel radius and suppresses them beyond 100 pixels', () => {
+    const socketRef = { current: mockSocket };
+    const participants = [
+      { id: 'near-peer', x: 150, y: 100 }, // dist = 50px <= 100px
+      { id: 'far-peer', x: 300, y: 300 },   // dist ≈ 283px > 100px
+    ];
+
+    const { result } = renderHook(() =>
+      useWebRTC({
+        socketRef,
+        localUser: { id: 'u1', x: 100, y: 100 },
+        participants,
+        enabled: true,
+      }),
+    );
+
+    mockSocket.emit.mockClear();
+
+    act(() => {
+      // Near peer (50px <= 100px): must emit offer
+      result.current.manager.onSignal({
+        type: 'offer',
+        targetId: 'near-peer',
+        offer: { sdp: 'near-offer' },
+      });
+
+      // Far peer (283px > 100px): must suppress offer
+      result.current.manager.onSignal({
+        type: 'offer',
+        targetId: 'far-peer',
+        offer: { sdp: 'far-offer' },
+      });
+
+      // Near peer (50px <= 100px): must emit answer
+      result.current.manager.onSignal({
+        type: 'answer',
+        targetId: 'near-peer',
+        answer: { sdp: 'near-answer' },
+      });
+
+      // Far peer (283px > 100px): must suppress answer
+      result.current.manager.onSignal({
+        type: 'answer',
+        targetId: 'far-peer',
+        answer: { sdp: 'far-answer' },
+      });
+    });
+
+    expect(mockSocket.emit).toHaveBeenCalledWith('webrtc:offer', {
+      targetId: 'near-peer',
+      offer: { sdp: 'near-offer' },
+    });
+    expect(mockSocket.emit).not.toHaveBeenCalledWith('webrtc:offer', {
+      targetId: 'far-peer',
+      offer: { sdp: 'far-offer' },
+    });
+
+    expect(mockSocket.emit).toHaveBeenCalledWith('webrtc:answer', {
+      targetId: 'near-peer',
+      answer: { sdp: 'near-answer' },
+    });
+    expect(mockSocket.emit).not.toHaveBeenCalledWith('webrtc:answer', {
+      targetId: 'far-peer',
+      answer: { sdp: 'far-answer' },
+    });
+  });
 });

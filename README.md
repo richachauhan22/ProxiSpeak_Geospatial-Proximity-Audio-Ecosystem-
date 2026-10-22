@@ -28,11 +28,17 @@ ProxiSpeak is a spatial audio and collaborative virtual office platform modeled 
   - `office:join`: Authenticates user join requests, assigns spawn locations, and delivers active room rosters.
   - `office:move`: Sanitizes, bounds-checks, and broadcasts real-time avatar `(x, y)` coordinate updates across all connected room participants.
   - `office:leave` & `disconnect`: Handles graceful participant departure and broadcasts presence removals.
-  - `webrtc:*`: Targeted signaling exchange between office participants.
-- **MongoDB Geospatial Schemas**:
-  - Mongoose office schema configured with GeoJSON `Point` coordinate definitions and `2dsphere` geospatial indexing for proximity calculations.
+  - `webrtc:*`: Targeted signaling exchange between office participants, strictly gated by 100-pixel proximity.
+- **MongoDB Geospatial Schemas & $near Queries**:
+  - Mongoose `UserLocationModel` with dual `2d` (Cartesian Euclidean plane) and `2dsphere` (GeoJSON) geospatial indexes.
+  - MongoDB `$near` query integration to find nearby colleagues (`GET /api/offices/:officeId/nearby`).
+  - Proximity clustering algorithm to group office members into conversation clusters (`GET /api/offices/:officeId/groups`).
+  - Strict 100-pixel proximity radius logic: WebRTC offer/answer signaling is only permitted between users within a 100-pixel distance.
 
 ### Frontend (`/client`)
+- **100-Pixel WebRTC Proximity Handshake**:
+  - Automatically initiates peer connections and exchanges WebRTC offers/answers when avatars enter the 100-pixel proximity radius.
+  - Gracefully terminates peer connections when avatars move beyond the 100-pixel radius.
 - **React Canvas Layer**:
   - High-performance HTML5 Canvas renderer handling high-DPI scaling, smooth animation loops (`requestAnimationFrame`), dynamic panning, and zooming.
 - **Movement & Collision Controller**:
