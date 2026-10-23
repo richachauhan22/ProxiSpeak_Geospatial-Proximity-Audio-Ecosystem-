@@ -1,3 +1,4 @@
+import { getSpatialAudioSettings } from './services/spatialAudio';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import OfficeCanvas from './office/OfficeCanvas';
 import JoinOfficePage from './pages/JoinOfficePage';
@@ -35,6 +36,8 @@ function App() {
   const peerConnectionsRef = useRef(new Map());
   const localStreamRef = useRef(null);
   const remoteAudioRef = useRef(new Map());
+  const audioContextsRef = useRef(new Map());
+  const spatialAudioNodesRef = useRef(new Map());
   const pendingCandidatesRef = useRef(new Map());
   const mutedRef = useRef(false);
   const mountedRef = useRef(true);
@@ -124,26 +127,51 @@ function App() {
     }
   }
 
-  function closePeerConnection(peerId) {
-    const pc = peerConnectionsRef.current.get(peerId);
+function closePeerConnection(peerId) {
+  const pc = peerConnectionsRef.current.get(peerId);
 
-    if (pc) {
-      pc.onicecandidate = null;
-      pc.ontrack = null;
-      pc.onconnectionstatechange = null;
-      pc.close();
-      peerConnectionsRef.current.delete(peerId);
-    }
-
-    pendingCandidatesRef.current.delete(peerId);
-
-    const audio = remoteAudioRef.current.get(peerId);
-    if (audio) {
-      audio.pause();
-      audio.srcObject = null;
-      remoteAudioRef.current.delete(peerId);
-    }
+  if (pc) {
+    pc.onicecandidate = null;
+    pc.ontrack = null;
+    pc.onconnectionstatechange = null;
+    pc.close();
+    peerConnectionsRef.current.delete(peerId);
   }
+
+  pendingCandidatesRef.current.delete(peerId);
+
+  const nodes = spatialAudioNodesRef.current.get(peerId);
+
+  if (nodes) {
+    try {
+      nodes.source.disconnect();
+      nodes.gainNode.disconnect();
+      nodes.pannerNode.disconnect();
+    } catch (audioError) {
+      console.warn('Audio cleanup warning:', audioError);
+    }
+
+    spatialAudioNodesRef.current.delete(peerId);
+  }
+
+  const audioContext = audioContextsRef.current.get(peerId);
+
+  if (audioContext) {
+    audioContextsRef.current.delete(peerId);
+    audioContext.close().catch((audioError) => {
+      console.warn('Could not close audio context:', audioError);
+    });
+  }
+
+  const audio = remoteAudioRef.current.get(peerId);
+
+  if (audio) {
+    audio.pause();
+    audio.srcObject = null;
+    remoteAudioRef.current.delete(peerId);
+  }
+}
+
 
   function closeAllPeerConnections() {
     for (const peerId of [...peerConnectionsRef.current.keys()]) {
@@ -199,24 +227,48 @@ function App() {
       }
     };
 
-    pc.ontrack = (event) => {
-      const stream = event.streams?.[0];
-      if (!stream) return;
+    
+pc.ontrack = async (event) => {
+  const stream = event.streams?.[0];
+  if (!stream) return;
 
-      let audio = remoteAudioRef.current.get(peerId);
-      if (!audio) {
-        audio = new Audio();
-        audio.autoplay = true;
-        remoteAudioRef.current.set(peerId, audio);
-      }
+  if (spatialAudioNodesRef.current.has(peerId)) return;
 
-      audio.srcObject = stream;
-      audio.play().catch(() => {
-        setProximityMessage(
-          'A nearby voice connection is ready. If you cannot hear audio, interact with the page and check your browser audio settings.',
-        );
-      });
-    };
+  try {
+    const audioContext = new AudioContext();
+    const source = audioContext.createMediaStreamSource(stream);
+    const gainNode = audioContext.createGain();
+    const pannerNode = audioContext.createStereoPanner();
+
+    gainNode.gain.value = 0;
+    pannerNode.pan.value = 0;
+
+    source.connect(gainNode);
+    gainNode.connect(pannerNode);
+    pannerNode.connect(audioContext.destination);
+
+    audioContextsRef.current.set(peerId, audioContext);
+
+    spatialAudioNodesRef.current.set(peerId, {
+      source,
+      gainNode,
+      pannerNode,
+      stream,
+    });
+
+    if (audioContext.state === 'suspended') {
+      await audioContext.resume();
+    }
+
+    setProximityMessage('Nearby voice audio is connected.');
+  } catch (error) {
+    console.error('Spatial audio setup failed:', error);
+
+    setProximityMessage(
+      'Voice connected, but audio could not start. Check microphone permissions and browser audio settings.',
+    );
+  }
+};
 
     pc.onconnectionstatechange = () => {
       if (
@@ -390,7 +442,45 @@ function App() {
   useEffect(() => {
     localUserRef.current = localUser;
   }, [localUser]);
+useEffect(() => {
+  if (!localUser) return;
 
+  const audioTimeConstant = 0.05;
+
+  for (const [peerId, nodes] of spatialAudioNodesRef.current) {
+    const remoteUser = participants.find(
+      (person) => String(person.id) === String(peerId),
+    );
+
+    const now = nodes.gainNode.context.currentTime;
+
+    if (!remoteUser) {
+      nodes.gainNode.gain.setTargetAtTime(
+        0,
+        now,
+        audioTimeConstant,
+      );
+      continue;
+    }
+
+    const settings = getSpatialAudioSettings(
+      localUser,
+      remoteUser,
+    );
+
+    nodes.gainNode.gain.setTargetAtTime(
+      settings.audible ? settings.volume : 0,
+      now,
+      audioTimeConstant,
+    );
+
+    nodes.pannerNode.pan.setTargetAtTime(
+      settings.pan,
+      now,
+      audioTimeConstant,
+    );
+  }
+}, [localUser, participants]);
   useEffect(() => {
     const socket = socketRef.current;
     if (!socket) return undefined;
