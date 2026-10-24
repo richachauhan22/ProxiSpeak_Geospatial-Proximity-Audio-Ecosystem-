@@ -9,16 +9,14 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --bg-dark: #12151e;
-      --bg-panel: rgba(18, 24, 38, 0.88);
-      --border-subtle: rgba(255, 255, 255, 0.08);
-      --border-glow: rgba(59, 130, 246, 0.35);
+      --bg-dark: #0f172a;
+      --bg-canvas: #e8e2d8;
       --accent-blue: #2563eb;
-      --accent-cyan: #06b6d4;
       --accent-green: #10b981;
       --accent-orange: #f97316;
-      --text-primary: #f8fafc;
-      --text-muted: #94a3b8;
+      --accent-purple: #8b5cf6;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
     }
 
     * {
@@ -31,8 +29,8 @@
 
     body {
       font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-      background-color: #e5ded3;
-      color: var(--text-primary);
+      background-color: var(--bg-canvas);
+      color: var(--text-main);
       height: 100vh;
       overflow: hidden;
       display: flex;
@@ -41,16 +39,16 @@
 
     /* Top Glass Header */
     header.office-header {
-      height: 56px;
-      background: rgba(255, 255, 255, 0.92);
-      backdrop-filter: blur(16px);
+      height: 54px;
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(14px);
       border-bottom: 1px solid rgba(0, 0, 0, 0.08);
       display: flex;
       align-items: center;
       justify-content: space-between;
       padding: 0 20px;
       z-index: 20;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
     }
 
     .brand-group {
@@ -67,7 +65,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+      box-shadow: 0 3px 10px rgba(37, 99, 235, 0.3);
     }
 
     .brand-title {
@@ -97,7 +95,7 @@
     .header-actions {
       display: flex;
       align-items: center;
-      gap: 14px;
+      gap: 16px;
     }
 
     .status-badge {
@@ -124,7 +122,7 @@
 
     @keyframes pulse {
       0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.4; transform: scale(0.85); }
+      50% { opacity: 0.35; transform: scale(0.8); }
     }
 
     .key-hint {
@@ -132,7 +130,7 @@
       font-size: 0.78rem;
       display: flex;
       align-items: center;
-      gap: 4px;
+      gap: 5px;
     }
 
     kbd {
@@ -151,7 +149,7 @@
       flex: 1;
       position: relative;
       overflow: hidden;
-      background: #efe9df;
+      background: radial-gradient(circle at 50% 50%, #f4eee5 0%, #e3dad0 100%);
     }
 
     canvas#officeCanvas {
@@ -159,28 +157,30 @@
       height: 100%;
       display: block;
       cursor: grab;
+      touch-action: none;
     }
 
-    canvas#officeCanvas:active {
+    canvas#officeCanvas.grabbing {
       cursor: grabbing;
     }
 
-    /* Telemetry Floating Card */
+    /* Floating Telemetry Card */
     .hud-card {
       position: absolute;
       background: rgba(15, 23, 42, 0.88);
       backdrop-filter: blur(16px);
       border: 1px solid rgba(255, 255, 255, 0.12);
       border-radius: 14px;
-      padding: 14px 18px;
+      padding: 12px 16px;
       color: #f8fafc;
-      box-shadow: 0 14px 35px rgba(0, 0, 0, 0.28);
+      box-shadow: 0 14px 35px rgba(0, 0, 0, 0.25);
       z-index: 10;
+      pointer-events: none;
     }
 
     .telemetry-hud {
-      top: 18px;
-      left: 18px;
+      top: 16px;
+      left: 16px;
       min-width: 250px;
     }
 
@@ -197,7 +197,7 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 0.82rem;
+      font-size: 0.8rem;
       margin-bottom: 5px;
     }
 
@@ -211,6 +211,57 @@
       color: #34d399;
     }
 
+    /* On-Screen Virtual D-Pad for Instant Movement */
+    .virtual-dpad {
+      position: absolute;
+      bottom: 24px;
+      left: 24px;
+      width: 120px;
+      height: 120px;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 24px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      gap: 3px;
+      padding: 6px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+      z-index: 15;
+    }
+
+    .dpad-btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      color: #f8fafc;
+      font-size: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.1s ease;
+    }
+
+    .dpad-btn:active, .dpad-btn.active {
+      background: #2563eb;
+      transform: scale(0.92);
+      box-shadow: 0 0 12px rgba(37, 99, 235, 0.5);
+    }
+
+    .dpad-center {
+      background: transparent;
+      border: none;
+      font-size: 0.65rem;
+      font-weight: 700;
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+    }
+
     /* Bottom Control Bar Dock */
     .control-dock {
       position: absolute;
@@ -219,68 +270,71 @@
       transform: translateX(-50%);
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
       padding: 8px 16px;
       background: rgba(15, 23, 42, 0.92);
       backdrop-filter: blur(20px);
       border: 1px solid rgba(255, 255, 255, 0.15);
       border-radius: 40px;
-      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.4);
-      z-index: 10;
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.35);
+      z-index: 15;
     }
 
     .dock-btn {
       display: inline-flex;
       align-items: center;
-      gap: 8px;
-      padding: 8px 15px;
-      background: rgba(255, 255, 255, 0.07);
+      gap: 6px;
+      padding: 7px 14px;
+      background: rgba(255, 255, 255, 0.08);
       border: 1px solid rgba(255, 255, 255, 0.09);
       border-radius: 20px;
       color: #f8fafc;
-      font-size: 0.82rem;
+      font-size: 0.8rem;
       font-weight: 600;
       cursor: pointer;
-      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: all 0.15s ease;
     }
 
     .dock-btn:hover {
-      background: rgba(255, 255, 255, 0.15);
+      background: rgba(255, 255, 255, 0.16);
       transform: translateY(-1px);
     }
 
     .dock-btn.active {
       background: #2563eb;
       border-color: #3b82f6;
-      box-shadow: 0 0 14px rgba(37, 99, 235, 0.5);
+      box-shadow: 0 0 12px rgba(37, 99, 235, 0.45);
     }
 
     .dock-btn.muted {
-      background: rgba(239, 68, 68, 0.2);
+      background: rgba(239, 68, 68, 0.22);
       border-color: rgba(239, 68, 68, 0.4);
       color: #fca5a5;
     }
 
     .dock-divider {
       width: 1px;
-      height: 24px;
+      height: 22px;
       background: rgba(255, 255, 255, 0.15);
+      margin: 0 2px;
     }
 
-    /* Radar Mini-Map in Bottom Right */
+    /* Radar Mini-Map */
     .minimap-panel {
       position: absolute;
       bottom: 24px;
       right: 24px;
-      width: 190px;
-      height: 120px;
+      width: 180px;
+      height: 112px;
       padding: 0;
       overflow: hidden;
       border-radius: 12px;
       border: 1px solid rgba(255, 255, 255, 0.2);
-      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
       background: #0f172a;
-      z-index: 10;
+      z-index: 15;
+      pointer-events: auto;
+      cursor: pointer;
     }
 
     canvas#miniMapCanvas {
@@ -292,20 +346,20 @@
     /* Proximity Toast Notification */
     .proximity-toast {
       position: absolute;
-      top: 20px;
+      top: 18px;
       left: 50%;
       transform: translateX(-50%) translateY(-10px);
-      padding: 9px 20px;
+      padding: 8px 18px;
       background: rgba(16, 185, 129, 0.95);
       backdrop-filter: blur(10px);
       color: #ffffff;
       border-radius: 25px;
-      font-size: 0.85rem;
+      font-size: 0.82rem;
       font-weight: 600;
       display: flex;
       align-items: center;
       gap: 8px;
-      box-shadow: 0 10px 25px rgba(16, 185, 129, 0.4);
+      box-shadow: 0 10px 25px rgba(16, 185, 129, 0.35);
       opacity: 0;
       pointer-events: none;
       transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
@@ -337,16 +391,16 @@
     <div class="header-actions">
       <div class="status-badge">
         <span class="beacon"></span>
-        <span>Week 2 Engine: 100px Proximity Audio Active</span>
+        <span>Week 2 Engine: 100px Proximity Active</span>
       </div>
       <div class="key-hint">
-        Move: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or Click Floor &bull; Drag to Pan
+        Move: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / Click Floor / D-Pad &bull; Drag to Pan Office
       </div>
     </div>
   </header>
 
   <!-- Interactive 2D Canvas Viewport -->
-  <main class="canvas-viewport">
+  <main class="canvas-viewport" id="viewport">
     <canvas id="officeCanvas"></canvas>
 
     <!-- Top Left Live Proximity & Audio HUD -->
@@ -369,17 +423,32 @@
         <span class="hud-val" id="webrtcStateLabel">Standby</span>
       </div>
       <div class="hud-row">
-        <span>Volume Attenuation:</span>
+        <span>Spatial Volume:</span>
         <span class="hud-val" id="volumeLabel">0%</span>
       </div>
       <div class="hud-row">
-        <span>Camera Zoom:</span>
+        <span>Zoom Level:</span>
         <span class="hud-val" id="zoomLabel">100%</span>
       </div>
     </div>
 
+    <!-- On-Screen Virtual D-Pad for Direct Movement -->
+    <div class="virtual-dpad" id="virtualDpad" title="Click or Hold to move Mia">
+      <div></div>
+      <button class="dpad-btn" id="dpadUp" title="Move Up">▲</button>
+      <div></div>
+
+      <button class="dpad-btn" id="dpadLeft" title="Move Left">◀</button>
+      <div class="dpad-center">MOVE</div>
+      <button class="dpad-btn" id="dpadRight" title="Move Right">▶</button>
+
+      <div></div>
+      <button class="dpad-btn" id="dpadDown" title="Move Down">▼</button>
+      <div></div>
+    </div>
+
     <!-- Mini-Map Radar -->
-    <div class="hud-card minimap-panel">
+    <div class="minimap-panel" id="minimapBox" title="Click anywhere on minimap to jump">
       <canvas id="miniMapCanvas"></canvas>
     </div>
 
@@ -397,13 +466,21 @@
 
       <button class="dock-btn active" id="haloBtn" title="Toggle 100px Proximity Halo">
         <span>⭕</span>
-        <span id="haloText">100px Halo: On</span>
+        <span id="haloText">100px Halo</span>
+      </button>
+
+      <button class="dock-btn active" id="followCamBtn" title="Toggle Camera Follow Avatar">
+        <span>🎥</span>
+        <span id="followCamText">Follow Mia: ON</span>
       </button>
 
       <div class="dock-divider"></div>
 
       <button class="dock-btn" id="zoomOutBtn" title="Zoom Out">
         <span>🔍-</span>
+      </button>
+      <button class="dock-btn" id="fitScreenBtn" title="Fit Entire Office to Screen">
+        <span>Fit Screen</span>
       </button>
       <button class="dock-btn" id="zoomInBtn" title="Zoom In">
         <span>🔍+</span>
@@ -414,7 +491,7 @@
 
       <div class="dock-divider"></div>
 
-      <button class="dock-btn" id="soundTestBtn" title="Synthesize Web Audio Spatial Chime">
+      <button class="dock-btn" id="soundTestBtn" title="Test Web Audio Spatial Chime">
         <span>🔔 Chime</span>
       </button>
       <button class="dock-btn" id="addColleagueBtn" title="Spawn Colleague Avatar">
@@ -462,10 +539,10 @@
       isMuted: false,
       isSpeaking: true,
       arcPosition: 'right',
-      speed: 240,
+      speed: 260,
     };
 
-    // Realistic Teammate Avatars matching the original oVice design
+    // Realistic Teammate Avatars matching original oVice design
     const participants = [
       {
         id: 'user-oliver',
@@ -524,11 +601,16 @@
     const miniCanvas = document.getElementById('miniMapCanvas');
     const miniCtx = miniCanvas.getContext('2d');
 
-    // Camera Viewport & Zoom
+    // Camera Viewport & Pan Coordinates
     let zoom = 1.0;
     let panX = 0;
     let panY = 0;
     let showHalo = true;
+    let followCamera = true;
+    let clickTarget = null;
+    let targetMarkerAlpha = 0;
+
+    // Pointer Drag Tracking
     let isDragging = false;
     let dragStartX = 0;
     let dragStartY = 0;
@@ -588,10 +670,28 @@
       clearTimeout(toast._timer);
       toast._timer = setTimeout(() => {
         toast.classList.remove('show');
-      }, 2800);
+      }, 2600);
     }
 
-    // --- 3. High-DPI Responsive Canvas ---
+    // --- 3. Viewport Calculations & High-DPI Resizing ---
+    function getViewportMetrics() {
+      const rect = canvas.getBoundingClientRect();
+      const margin = 40;
+      // Scale that fits the full office map comfortably inside the window with padding
+      const baseScale = Math.min((rect.width - margin * 2) / WORLD_WIDTH, (rect.height - margin * 2) / WORLD_HEIGHT);
+      const scale = baseScale * zoom;
+
+      // Base origin that centers the office map in the middle of the canvas
+      const baseOriginX = (rect.width - WORLD_WIDTH * scale) / 2;
+      const baseOriginY = (rect.height - WORLD_HEIGHT * scale) / 2;
+
+      // Final origin including user panning
+      const offsetX = baseOriginX + panX;
+      const offsetY = baseOriginY + panY;
+
+      return { rect, scale, offsetX, offsetY, baseScale };
+    }
+
     function handleResize() {
       const rect = canvas.getBoundingClientRect();
       const dpr = window.devicePixelRatio || 1;
@@ -607,18 +707,32 @@
     window.addEventListener('resize', handleResize);
     handleResize();
 
-    // Center camera on Mia at start
-    function recenterCamera() {
-      const rect = canvas.getBoundingClientRect();
-      const baseScale = Math.min(rect.width / WORLD_WIDTH, rect.height / WORLD_HEIGHT);
-      const totalScale = baseScale * zoom;
-      panX = (rect.width / 2) - localUser.x * totalScale;
-      panY = (rect.height / 2) - localUser.y * totalScale;
-      document.getElementById('zoomLabel').textContent = `${Math.round(zoom * 100)}%`;
+    // Fit entire office map to screen
+    function fitOfficeToScreen() {
+      zoom = 1.0;
+      panX = 0;
+      panY = 0;
+      document.getElementById('zoomLabel').textContent = '100%';
+      showToast('📐 Office Map Fit to Screen');
     }
-    setTimeout(recenterCamera, 100);
 
-    // --- 4. Controls & Drag-to-Pan / Click-to-Walk ---
+    // Recenter camera directly on Mia
+    function recenterOnMia() {
+      const { rect, scale } = getViewportMetrics();
+      // Center Mia on screen
+      const targetScreenX = rect.width / 2;
+      const targetScreenY = rect.height / 2;
+      const baseOriginX = (rect.width - WORLD_WIDTH * scale) / 2;
+      const baseOriginY = (rect.height - WORLD_HEIGHT * scale) / 2;
+
+      panX = targetScreenX - baseOriginX - localUser.x * scale;
+      panY = targetScreenY - baseOriginY - localUser.y * scale;
+      showToast('🎯 Focused on Mia');
+    }
+
+    setTimeout(fitOfficeToScreen, 120);
+
+    // --- 4. Controls: WASD, Drag-to-Pan Office, and Click-to-Walk ---
     window.addEventListener('keydown', (e) => {
       const k = e.key.toLowerCase();
       if (['w', 'a', 's', 'd'].includes(k)) keys[k] = true;
@@ -631,78 +745,139 @@
       if (['arrowup', 'arrowleft', 'arrowdown', 'arrowright'].includes(k)) keys[e.key] = false;
     });
 
+    // Pointer Events for Dragging Office Map and Clicking to Walk
     canvas.addEventListener('pointerdown', (e) => {
+      canvas.setPointerCapture(e.pointerId);
       isDragging = true;
       hasMovedDrag = false;
       dragStartX = e.clientX;
       dragStartY = e.clientY;
+      canvas.classList.add('grabbing');
     });
 
-    window.addEventListener('pointermove', (e) => {
+    canvas.addEventListener('pointermove', (e) => {
       if (!isDragging) return;
       const dx = e.clientX - dragStartX;
       const dy = e.clientY - dragStartY;
-      if (Math.hypot(dx, dy) > 4) {
+
+      if (Math.hypot(dx, dy) > 5) {
         hasMovedDrag = true;
         panX += dx;
         panY += dy;
         dragStartX = e.clientX;
         dragStartY = e.clientY;
+
+        // If user manually drags the map, pause automatic follow
+        if (followCamera && Math.hypot(dx, dy) > 8) {
+          // keep free pan
+        }
       }
     });
 
-    window.addEventListener('pointerup', (e) => {
+    canvas.addEventListener('pointerup', (e) => {
       if (!isDragging) return;
       isDragging = false;
+      canvas.classList.remove('grabbing');
+      try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
 
-      // If user clicked without dragging, trigger click-to-walk
+      // If clicked without dragging, walk Mia to that world point!
       if (!hasMovedDrag) {
-        const rect = canvas.getBoundingClientRect();
-        const baseScale = Math.min(rect.width / WORLD_WIDTH, rect.height / WORLD_HEIGHT);
-        const totalScale = baseScale * zoom;
+        const { rect, scale, offsetX, offsetY } = getViewportMetrics();
+        const clickScreenX = e.clientX - rect.left;
+        const clickScreenY = e.clientY - rect.top;
 
-        const worldX = (e.clientX - rect.left - panX) / totalScale;
-        const worldY = (e.clientY - rect.top - panY) / totalScale;
+        const worldX = (clickScreenX - offsetX) / scale;
+        const worldY = (clickScreenY - offsetY) / scale;
 
-        localUser.targetX = Math.max(34, Math.min(WORLD_WIDTH - 34, worldX));
-        localUser.targetY = Math.max(34, Math.min(WORLD_HEIGHT - 34, worldY));
+        // Only move if clicked within or near the office bounds
+        if (worldX >= -20 && worldX <= WORLD_WIDTH + 20 && worldY >= -20 && worldY <= WORLD_HEIGHT + 20) {
+          localUser.targetX = Math.max(30, Math.min(WORLD_WIDTH - 30, worldX));
+          localUser.targetY = Math.max(30, Math.min(WORLD_HEIGHT - 30, worldY));
+          clickTarget = { x: localUser.targetX, y: localUser.targetY };
+          targetMarkerAlpha = 1.0;
+        }
       }
     });
 
-    // Mouse wheel zoom
+    canvas.addEventListener('pointercancel', (e) => {
+      isDragging = false;
+      canvas.classList.remove('grabbing');
+    });
+
+    // Mouse wheel zoom centered on cursor
     canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
-      const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
-      const nextZoom = Math.max(0.6, Math.min(2.4, zoom * zoomFactor));
+      const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+      const nextZoom = Math.max(0.5, Math.min(3.0, zoom * zoomFactor));
 
-      const rect = canvas.getBoundingClientRect();
+      const { rect } = getViewportMetrics();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
 
+      // Adjust pan to zoom towards mouse position
       panX = mouseX - (mouseX - panX) * (nextZoom / zoom);
       panY = mouseY - (mouseY - panY) * (nextZoom / zoom);
       zoom = nextZoom;
       document.getElementById('zoomLabel').textContent = `${Math.round(zoom * 100)}%`;
     }, { passive: false });
 
+    // On-Screen Virtual D-Pad Touch/Click Handlers
+    function bindDpadButton(btnId, keyName) {
+      const btn = document.getElementById(btnId);
+      const startMove = (e) => {
+        e.preventDefault();
+        keys[keyName] = true;
+        btn.classList.add('active');
+      };
+      const stopMove = (e) => {
+        e.preventDefault();
+        keys[keyName] = false;
+        btn.classList.remove('active');
+      };
+
+      btn.addEventListener('pointerdown', startMove);
+      btn.addEventListener('pointerup', stopMove);
+      btn.addEventListener('pointerleave', stopMove);
+      btn.addEventListener('pointercancel', stopMove);
+    }
+    bindDpadButton('dpadUp', 'w');
+    bindDpadButton('dpadDown', 's');
+    bindDpadButton('dpadLeft', 'a');
+    bindDpadButton('dpadRight', 'd');
+
+    // Minimap Click-to-Jump
+    document.getElementById('minimapBox').addEventListener('click', (e) => {
+      const miniRect = miniCanvas.getBoundingClientRect();
+      const clickX = e.clientX - miniRect.left;
+      const clickY = e.clientY - miniRect.top;
+
+      const normX = clickX / miniRect.width;
+      const normY = clickY / miniRect.height;
+
+      localUser.targetX = Math.max(30, Math.min(WORLD_WIDTH - 30, normX * WORLD_WIDTH));
+      localUser.targetY = Math.max(30, Math.min(WORLD_HEIGHT - 30, normY * WORLD_HEIGHT));
+      clickTarget = { x: localUser.targetX, y: localUser.targetY };
+      targetMarkerAlpha = 1.0;
+    });
+
     // --- 5. Realistic Avatar Drawing ---
-    function drawRealisticAvatar(user, isLocal = false, scale = 1.0) {
+    function drawRealisticAvatar(user, isLocal = false, scale = 1.0, offsetX = 0, offsetY = 0) {
+      const screenX = offsetX + user.x * scale;
+      const screenY = offsetY + user.y * scale;
       const radius = 34 * scale;
       const ringColor = user.ringColor || '#2563eb';
-      const x = user.x;
-      const y = user.y;
 
       ctx.save();
 
-      // 1. Proximity Halo (100px WebRTC proximity radius)
+      // 1. Proximity Halo (100px WebRTC radius)
       if (showHalo) {
         ctx.save();
         ctx.beginPath();
-        ctx.arc(x, y, PROXIMITY_RADIUS * scale, 0, Math.PI * 2);
+        ctx.arc(screenX, screenY, PROXIMITY_RADIUS * scale, 0, Math.PI * 2);
 
         if (isLocal) {
-          const auraGrad = ctx.createRadialGradient(x, y, radius, x, y, PROXIMITY_RADIUS * scale);
-          auraGrad.addColorStop(0, 'rgba(37, 99, 235, 0.15)');
+          const auraGrad = ctx.createRadialGradient(screenX, screenY, radius, screenX, screenY, PROXIMITY_RADIUS * scale);
+          auraGrad.addColorStop(0, 'rgba(37, 99, 235, 0.16)');
           auraGrad.addColorStop(1, 'rgba(37, 99, 235, 0.00)');
           ctx.fillStyle = auraGrad;
           ctx.fill();
@@ -712,7 +887,7 @@
           ctx.setLineDash([5 * scale, 5 * scale]);
           ctx.stroke();
         } else {
-          ctx.strokeStyle = 'rgba(0, 0, 0, 0.12)';
+          ctx.strokeStyle = 'rgba(0, 0, 0, 0.14)';
           ctx.lineWidth = 1.2 * scale;
           ctx.setLineDash([4 * scale, 4 * scale]);
           ctx.stroke();
@@ -723,21 +898,21 @@
       // 2. Soft Contact Floor Shadow
       ctx.save();
       ctx.beginPath();
-      ctx.ellipse(x, y + radius + 4 * scale, radius * 0.9, radius * 0.32, 0, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(40, 30, 20, 0.18)';
+      ctx.ellipse(screenX, screenY + radius + 4 * scale, radius * 0.9, radius * 0.32, 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(40, 30, 20, 0.2)';
       ctx.fill();
       ctx.restore();
 
       // 3. Colored Team Outer Ring
       ctx.beginPath();
-      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.arc(screenX, screenY, radius, 0, Math.PI * 2);
       ctx.lineWidth = 4 * scale;
       ctx.strokeStyle = ringColor;
       ctx.stroke();
 
       // 4. White Inner Separator Ring
       ctx.beginPath();
-      ctx.arc(x, y, radius - 2.5 * scale, 0, Math.PI * 2);
+      ctx.arc(screenX, screenY, radius - 2.5 * scale, 0, Math.PI * 2);
       ctx.fillStyle = '#ffffff';
       ctx.fill();
 
@@ -747,27 +922,27 @@
 
       ctx.save();
       ctx.beginPath();
-      ctx.arc(x, y, photoRadius, 0, Math.PI * 2);
+      ctx.arc(screenX, screenY, photoRadius, 0, Math.PI * 2);
       ctx.clip();
 
       if (photo && photo.complete && photo.naturalWidth > 0) {
-        ctx.drawImage(photo, x - photoRadius, y - photoRadius, photoRadius * 2, photoRadius * 2);
+        ctx.drawImage(photo, screenX - photoRadius, screenY - photoRadius, photoRadius * 2, photoRadius * 2);
       } else {
-        const grad = ctx.createLinearGradient(x - photoRadius, y - photoRadius, x + photoRadius, y + photoRadius);
+        const grad = ctx.createLinearGradient(screenX - photoRadius, screenY - photoRadius, screenX + photoRadius, screenY + photoRadius);
         grad.addColorStop(0, ringColor);
         grad.addColorStop(1, '#0f172a');
         ctx.fillStyle = grad;
-        ctx.fillRect(x - photoRadius, y - photoRadius, photoRadius * 2, photoRadius * 2);
+        ctx.fillRect(screenX - photoRadius, screenY - photoRadius, photoRadius * 2, photoRadius * 2);
 
         ctx.fillStyle = '#ffffff';
         ctx.font = `700 ${Math.max(12, 18 * scale)}px Plus Jakarta Sans`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(user.displayName ? user.displayName[0] : '?', x, y);
+        ctx.fillText(user.displayName ? user.displayName[0] : '?', screenX, screenY);
       }
       ctx.restore();
 
-      // 6. Orange Audio Speaking Arc (Voice Activity Indicator)
+      // 6. Orange Audio Speaking Arc
       if (user.isSpeaking && !user.isMuted) {
         ctx.save();
         ctx.beginPath();
@@ -780,10 +955,10 @@
           endAngle = Math.PI * 0.72;
         }
 
-        ctx.arc(x, y, arcRadius, startAngle, endAngle);
+        ctx.arc(screenX, screenY, arcRadius, startAngle, endAngle);
         ctx.lineWidth = 3.8 * scale;
         ctx.lineCap = 'round';
-        ctx.strokeStyle = '#f97316'; // Vibrant orange speaking arc
+        ctx.strokeStyle = '#f97316';
         ctx.stroke();
         ctx.restore();
       }
@@ -792,8 +967,8 @@
       if (user.isMuted) {
         const badgeAngle = Math.PI * 0.28;
         const badgeDistance = radius - 1 * scale;
-        const bx = x + Math.cos(badgeAngle) * badgeDistance;
-        const by = y + Math.sin(badgeAngle) * badgeDistance;
+        const bx = screenX + Math.cos(badgeAngle) * badgeDistance;
+        const by = screenY + Math.sin(badgeAngle) * badgeDistance;
         const br = 10 * scale;
 
         ctx.save();
@@ -835,30 +1010,33 @@
       const name = user.displayName || 'Teammate';
       ctx.font = `600 ${Math.max(10, 11 * scale)}px Plus Jakarta Sans`;
       const textWidth = ctx.measureText(name).width;
-      const labelY = y + radius + 14 * scale;
+      const labelY = screenY + radius + 14 * scale;
 
       ctx.save();
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.1)';
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.12)';
       ctx.shadowBlur = 4 * scale;
       ctx.shadowOffsetY = 1 * scale;
       ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
       ctx.beginPath();
-      ctx.roundRect(x - textWidth / 2 - 7 * scale, labelY - 8 * scale, textWidth + 14 * scale, 16 * scale, 8 * scale);
+      ctx.roundRect(screenX - textWidth / 2 - 7 * scale, labelY - 8 * scale, textWidth + 14 * scale, 16 * scale, 8 * scale);
       ctx.fill();
       ctx.restore();
 
       ctx.fillStyle = '#334155';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(name, x, labelY);
+      ctx.fillText(name, screenX, labelY);
 
       ctx.restore();
     }
 
     // --- 6. Realistic Proximity Connections ---
-    function renderProximityConnections(scale = 1.0) {
+    function renderProximityConnections(scale = 1.0, offsetX = 0, offsetY = 0) {
       let activePeers = 0;
       let minDistance = 9999;
+
+      const miaScreenX = offsetX + localUser.x * scale;
+      const miaScreenY = offsetY + localUser.y * scale;
 
       participants.forEach(peer => {
         const dist = Math.hypot(localUser.x - peer.x, localUser.y - peer.y);
@@ -873,18 +1051,21 @@
             showToast(`🎙️ In Range with ${peer.displayName}! WebRTC Audio Connected (${Math.round(dist)}px)`);
           }
 
-          // Solid black connection line as in the original oVice design
+          const peerScreenX = offsetX + peer.x * scale;
+          const peerScreenY = offsetY + peer.y * scale;
+
+          // Solid black connection line as in original oVice design
           ctx.save();
           ctx.beginPath();
-          ctx.moveTo(localUser.x, localUser.y);
-          ctx.lineTo(peer.x, peer.y);
+          ctx.moveTo(miaScreenX, miaScreenY);
+          ctx.lineTo(peerScreenX, peerScreenY);
           ctx.lineWidth = 2.2 * scale;
           ctx.strokeStyle = '#18181b';
           ctx.stroke();
 
           // Black circular badge at midpoint with peer count / callout
-          const midX = (localUser.x + peer.x) / 2;
-          const midY = (localUser.y + peer.y) / 2;
+          const midX = (miaScreenX + peerScreenX) / 2;
+          const midY = (miaScreenY + peerScreenY) / 2;
           const badgeR = 14 * scale;
 
           ctx.beginPath();
@@ -914,16 +1095,21 @@
       const marcus = participants.find(p => p.id === 'user-marcus');
       const david = participants.find(p => p.id === 'user-david');
       if (marcus && david) {
+        const mx = offsetX + marcus.x * scale;
+        const my = offsetY + marcus.y * scale;
+        const dx = offsetX + david.x * scale;
+        const dy = offsetY + david.y * scale;
+
         ctx.save();
         ctx.beginPath();
-        ctx.moveTo(marcus.x, marcus.y);
-        ctx.lineTo(david.x, david.y);
+        ctx.moveTo(mx, my);
+        ctx.lineTo(dx, dy);
         ctx.lineWidth = 2 * scale;
         ctx.strokeStyle = '#18181b';
         ctx.stroke();
 
-        const midX = (marcus.x + david.x) / 2;
-        const midY = (marcus.y + david.y) / 2;
+        const midX = (mx + dx) / 2;
+        const midY = (my + dy) / 2;
         ctx.beginPath();
         ctx.arc(midX, midY, 14 * scale, 0, Math.PI * 2);
         ctx.fillStyle = '#18181b';
@@ -1007,6 +1193,7 @@
       if (keys.d || keys.ArrowRight) dx += 1;
 
       if (dx !== 0 || dy !== 0) {
+        // Direct keyboard/dpad walking
         const len = Math.hypot(dx, dy);
         dx /= len;
         dy /= len;
@@ -1015,21 +1202,46 @@
         localUser.y += dy * localUser.speed * dt;
         localUser.targetX = localUser.x;
         localUser.targetY = localUser.y;
+        clickTarget = null;
       } else {
+        // Smooth click-to-walk lerp
         const distX = localUser.targetX - localUser.x;
         const distY = localUser.targetY - localUser.y;
         const dist = Math.hypot(distX, distY);
 
-        if (dist > 2) {
+        if (dist > 3) {
           const step = Math.min(dist, localUser.speed * dt);
           localUser.x += (distX / dist) * step;
           localUser.y += (distY / dist) * step;
+        } else {
+          clickTarget = null;
         }
       }
 
       // Office floor bounds
       localUser.x = Math.max(34, Math.min(WORLD_WIDTH - 34, localUser.x));
       localUser.y = Math.max(34, Math.min(WORLD_HEIGHT - 34, localUser.y));
+
+      // Camera follow option
+      if (followCamera && !isDragging) {
+        const { rect, scale } = getViewportMetrics();
+        const targetScreenX = rect.width / 2;
+        const targetScreenY = rect.height / 2;
+        const baseOriginX = (rect.width - WORLD_WIDTH * scale) / 2;
+        const baseOriginY = (rect.height - WORLD_HEIGHT * scale) / 2;
+
+        const desiredPanX = targetScreenX - baseOriginX - localUser.x * scale;
+        const desiredPanY = targetScreenY - baseOriginY - localUser.y * scale;
+
+        // Smooth camera lerp
+        panX += (desiredPanX - panX) * 0.12;
+        panY += (desiredPanY - panY) * 0.12;
+      }
+
+      // Decay click target marker
+      if (targetMarkerAlpha > 0) {
+        targetMarkerAlpha = Math.max(0, targetMarkerAlpha - dt * 1.5);
+      }
     }
 
     function renderLoop(timestamp) {
@@ -1038,48 +1250,74 @@
 
       updatePhysics(dt);
 
-      const rect = canvas.getBoundingClientRect();
-      const baseScale = Math.min(rect.width / WORLD_WIDTH, rect.height / WORLD_HEIGHT);
-      const totalScale = baseScale * zoom;
+      const { rect, scale, offsetX, offsetY } = getViewportMetrics();
 
       // Clear Canvas
       ctx.clearRect(0, 0, rect.width, rect.height);
 
-      // Canvas background backdrop
-      ctx.fillStyle = '#f0ebe1';
+      // Clean workspace background backdrop
+      ctx.fillStyle = '#e5ded3';
       ctx.fillRect(0, 0, rect.width, rect.height);
 
-      // Viewport transform
-      ctx.save();
-      ctx.translate(panX, panY);
-      ctx.scale(totalScale, totalScale);
+      // Render Realistic Office Map with Soft Floor Shadow
+      const mapWidth = WORLD_WIDTH * scale;
+      const mapHeight = WORLD_HEIGHT * scale;
 
-      // Render Realistic Office Map
+      ctx.save();
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.18)';
+      ctx.shadowBlur = 30;
+      ctx.shadowOffsetY = 10;
+
       if (officeMapImage.complete && officeMapImage.naturalWidth > 0) {
-        ctx.drawImage(officeMapImage, 0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+        ctx.drawImage(officeMapImage, offsetX, offsetY, mapWidth, mapHeight);
       } else {
         // Fallback gradient
-        const grad = ctx.createLinearGradient(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+        const grad = ctx.createLinearGradient(offsetX, offsetY, offsetX + mapWidth, offsetY + mapHeight);
         grad.addColorStop(0, '#f5ede0');
         grad.addColorStop(1, '#ebdcc7');
         ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+        ctx.fillRect(offsetX, offsetY, mapWidth, mapHeight);
+      }
+      ctx.restore();
+
+      // Subtle border around office floor
+      ctx.save();
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(offsetX, offsetY, mapWidth, mapHeight);
+      ctx.restore();
+
+      // Animated Click Destination Marker
+      if (clickTarget && targetMarkerAlpha > 0) {
+        const markerX = offsetX + clickTarget.x * scale;
+        const markerY = offsetY + clickTarget.y * scale;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(markerX, markerY, (12 + (1 - targetMarkerAlpha) * 16) * scale, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(37, 99, 235, ${targetMarkerAlpha * 0.8})`;
+        ctx.lineWidth = 2.5 * scale;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(markerX, markerY, 4 * scale, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(37, 99, 235, ${targetMarkerAlpha})`;
+        ctx.fill();
+        ctx.restore();
       }
 
       // Render Proximity Connection Lines
-      renderProximityConnections(1.0);
+      renderProximityConnections(scale, offsetX, offsetY);
 
       // Render Remote Participants
       participants.forEach(peer => {
-        drawRealisticAvatar(peer, false, 1.0);
+        drawRealisticAvatar(peer, false, scale, offsetX, offsetY);
       });
 
       // Render Local Avatar Mia
-      drawRealisticAvatar(localUser, true, 1.0);
+      drawRealisticAvatar(localUser, true, scale, offsetX, offsetY);
 
-      ctx.restore();
-
-      // Render Minimap
+      // Render Minimap Radar
       renderMiniMap();
 
       requestAnimationFrame(renderLoop);
@@ -1100,17 +1338,25 @@
       document.getElementById('haloText').textContent = `100px Halo: ${showHalo ? 'On' : 'Off'}`;
     });
 
+    document.getElementById('followCamBtn').addEventListener('click', (e) => {
+      followCamera = !followCamera;
+      e.currentTarget.classList.toggle('active', followCamera);
+      document.getElementById('followCamText').textContent = `Follow Mia: ${followCamera ? 'ON' : 'OFF'}`;
+      showToast(followCamera ? '🎥 Camera Following Mia' : '🖐️ Free Pan Mode Active (Drag Map)');
+    });
+
     document.getElementById('zoomInBtn').addEventListener('click', () => {
-      zoom = Math.min(2.4, zoom * 1.15);
-      recenterCamera();
+      zoom = Math.min(3.0, zoom * 1.18);
+      document.getElementById('zoomLabel').textContent = `${Math.round(zoom * 100)}%`;
     });
 
     document.getElementById('zoomOutBtn').addEventListener('click', () => {
-      zoom = Math.max(0.6, zoom * 0.85);
-      recenterCamera();
+      zoom = Math.max(0.5, zoom * 0.85);
+      document.getElementById('zoomLabel').textContent = `${Math.round(zoom * 100)}%`;
     });
 
-    document.getElementById('recenterBtn').addEventListener('click', recenterCamera);
+    document.getElementById('fitScreenBtn').addEventListener('click', fitOfficeToScreen);
+    document.getElementById('recenterBtn').addEventListener('click', recenterOnMia);
 
     document.getElementById('soundTestBtn').addEventListener('click', () => {
       playSpatialChime(659.25, 987.77);
