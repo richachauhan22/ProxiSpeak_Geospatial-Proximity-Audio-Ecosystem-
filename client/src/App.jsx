@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import OfficeCanvas from './office/OfficeCanvas';
 import JoinOfficePage from './pages/JoinOfficePage';
 import LandingPage from './pages/LandingPage';
@@ -32,7 +32,10 @@ function App() {
   const [avatarUrl, setAvatarUrl] = useState('/avatar_mia.png');
   const [officeId, setOfficeId] = useState('oVice HQ / C-03');
   const [joined, setJoined] = useState(() => window.location.pathname === '/office');
-  const [localUser, setLocalUser] = useState(() => DEFAULT_LOCAL_USER);
+  const [localUser, setLocalUser] = useState(() => ({
+    ...DEFAULT_LOCAL_USER,
+    id: `user-${Math.random().toString(36).substring(2, 9)}`,
+  }));
   const [participants, setParticipants] = useState(() => DEFAULT_OFFICE_PARTICIPANTS);
   const [error, setError] = useState('');
   const [isJoining, setIsJoining] = useState(false);
@@ -192,17 +195,12 @@ function App() {
     };
 
     const handleAvatarMove = (payload) => {
+      if (!payload?.id) return;
       setParticipants((current) =>
         current.map((member) =>
           member.id === payload.id ? { ...member, x: payload.x, y: payload.y } : member,
         ),
       );
-      const currentUser = localUserRef.current;
-      if (currentUser && currentUser.id === payload.id) {
-        const nextUser = { ...currentUser, x: payload.x, y: payload.y };
-        localUserRef.current = nextUser;
-        setLocalUser(nextUser);
-      }
     };
 
     const handleError = (payload) => {
@@ -254,6 +252,7 @@ function App() {
     if (!socket || !joinRequest) return;
 
     socket.emit('office:join', {
+      id: joinRequest.id,
       officeId: joinRequest.officeId,
       displayName: joinRequest.displayName,
       avatarColor: joinRequest.avatarColor,
@@ -283,7 +282,9 @@ function App() {
       return;
     }
 
+    const userId = localUserRef.current?.id || `user-${Math.random().toString(36).substring(2, 9)}`;
     joinRequestRef.current = {
+      id: userId,
       displayName: normalizedName,
       officeId: normalizedOfficeId,
       avatarColor,
@@ -292,6 +293,7 @@ function App() {
 
     const updatedUser = {
       ...DEFAULT_LOCAL_USER,
+      id: userId,
       displayName: normalizedName,
       avatarColor,
       ringColor: avatarColor,
@@ -351,7 +353,7 @@ function App() {
     localUserRef.current = nextUser;
     setLocalUser(nextUser);
     setParticipants((current) =>
-      current.map((member) => (member.id === nextUser.id ? { ...member, x: nextPosition.x, y: nextPosition.y } : member)),
+      current.map((member) => (member.id && nextUser.id && member.id === nextUser.id ? { ...member, x: nextPosition.x, y: nextPosition.y } : member)),
     );
     if (socketRef.current?.connected) {
       socketRef.current.emit('office:move', { officeId, x: nextPosition.x, y: nextPosition.y });
