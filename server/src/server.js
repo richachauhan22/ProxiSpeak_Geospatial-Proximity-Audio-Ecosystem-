@@ -1,3 +1,4 @@
+
 import express from 'express';
 import http from 'http';
 import cors from 'cors';
@@ -44,7 +45,9 @@ function validateOfficeId(value) {
 function normalizeColor(value) {
   if (typeof value !== 'string') return config.defaultAvatarColor;
   const trimmed = value.trim();
-  return /^#[0-9a-fA-F]{6}$/.test(trimmed) ? trimmed : config.defaultAvatarColor;
+  return /^#[0-9a-fA-F]{6}$/.test(trimmed)
+    ? trimmed
+    : config.defaultAvatarColor;
 }
 
 function clamp(value, min, max) {
@@ -56,7 +59,12 @@ function sanitizePosition(x, y) {
     return null;
   }
 
-  if (x < 0 || x > config.worldWidth || y < 0 || y > config.worldHeight) {
+  if (
+    x < 0 ||
+    x > config.worldWidth ||
+    y < 0 ||
+    y > config.worldHeight
+  ) {
     return null;
   }
 
@@ -81,9 +89,7 @@ function getRoomMembers(officeId) {
 }
 
 async function ensureOfficeSeed() {
-  if (!dbState.connected) {
-    return;
-  }
+  if (!dbState.connected) return;
 
   try {
     await OfficeModel.findOneAndUpdate(
@@ -108,7 +114,9 @@ async function ensureOfficeSeed() {
       },
     );
   } catch (error) {
-    logInfo('Mongo office seed failed', { error: error.message });
+    logInfo('Mongo office seed failed', {
+      error: error.message,
+    });
   }
 }
 
@@ -120,11 +128,16 @@ async function connectMongo() {
 
     dbState.connected = true;
     dbState.status = 'connected';
-    logInfo('MongoDB connected', { uri: config.mongoUri });
+
+    logInfo('MongoDB connected', {
+      uri: config.mongoUri,
+    });
+
     await ensureOfficeSeed();
   } catch (error) {
     dbState.connected = false;
     dbState.status = 'disconnected';
+
     logInfo('MongoDB unavailable; running in local-only mode', {
       error: error.message,
     });
@@ -133,14 +146,13 @@ async function connectMongo() {
 
 function detachUser(socketId) {
   const previous = activeUsers.get(socketId);
-  if (!previous) {
-    return;
-  }
+  if (!previous) return;
 
   const room = activeRooms.get(previous.officeId);
 
   if (room) {
     room.delete(socketId);
+
     if (room.size === 0) {
       activeRooms.delete(previous.officeId);
     } else {
@@ -152,6 +164,32 @@ function detachUser(socketId) {
   }
 
   activeUsers.delete(socketId);
+}
+
+/*
+ * WebRTC signaling helper.
+ * Only participants in the sender's current office can be targets.
+ */
+function findVoiceTarget(targetUserId, sender) {
+  if (
+    !sender ||
+    typeof targetUserId !== 'string' ||
+    !targetUserId ||
+    targetUserId === sender.id
+  ) {
+    return null;
+  }
+
+  const room = activeRooms.get(sender.officeId);
+  if (!room) return null;
+
+  for (const member of room.values()) {
+    if (member.id === targetUserId) {
+      return member;
+    }
+  }
+
+  return null;
 }
 
 app.use(cors());
@@ -169,6 +207,7 @@ app.get('/api/health', async (_req, res) => {
 
 app.get('/api/offices/:officeId', (_req, res) => {
   const officeId = _req.params.officeId || config.officeId;
+
   res.json({
     officeId,
     participants: getRoomMembers(officeId),
@@ -180,10 +219,82 @@ app.get('/api/offices/:officeId', (_req, res) => {
 });
 
 io.on('connection', (socket) => {
-  logInfo('Client connected', { socketId: socket.id });
+  logInfo('Client connected', {
+    socketId: socket.id,
+  });
+
   socket.emit('connection', {
     status: 'connected',
     socketId: socket.id,
+  });
+
+  /*
+   * WebRTC offer:
+   * Sender payload: { toUserId, description }
+   */
+  socket.on('webrtc:offer', (payload = {}) => {
+    const sender = activeUsers.get(socket.id);
+    const target = findVoiceTarget(payload.toUserId, sender);
+
+    if (
+      !target ||
+      !payload.description ||
+      payload.description.type !== 'offer' ||
+      typeof payload.description.sdp !== 'string'
+    ) {
+      return;
+    }
+
+    io.to(target.socketId).emit('webrtc:offer', {
+      fromUserId: sender.id,
+      fromDisplayName: sender.displayName,
+      description: payload.description,
+    });
+  });
+
+  /*
+   * WebRTC answer:
+   * Sender payload: { toUserId, description }
+   */
+  socket.on('webrtc:answer', (payload = {}) => {
+    const sender = activeUsers.get(socket.id);
+    const target = findVoiceTarget(payload.toUserId, sender);
+
+    if (
+      !target ||
+      !payload.description ||
+      payload.description.type !== 'answer' ||
+      typeof payload.description.sdp !== 'string'
+    ) {
+      return;
+    }
+
+    io.to(target.socketId).emit('webrtc:answer', {
+      fromUserId: sender.id,
+      description: payload.description,
+    });
+  });
+
+  /*
+   * ICE candidate:
+   * Sender payload: { toUserId, candidate }
+   */
+  socket.on('webrtc:ice-candidate', (payload = {}) => {
+    const sender = activeUsers.get(socket.id);
+    const target = findVoiceTarget(payload.toUserId, sender);
+
+    if (
+      !target ||
+      !payload.candidate ||
+      typeof payload.candidate.candidate !== 'string'
+    ) {
+      return;
+    }
+
+    io.to(target.socketId).emit('webrtc:ice-candidate', {
+      fromUserId: sender.id,
+      candidate: payload.candidate,
+    });
   });
 
   socket.on('office:join', (payload) => {
@@ -191,18 +302,24 @@ io.on('connection', (socket) => {
     const officeId = String(rawOfficeId).trim();
 
     if (!validateOfficeId(officeId)) {
-      socket.emit('error', { message: 'Please provide a valid office identifier.' });
+      socket.emit('error', {
+        message: 'Please provide a valid office identifier.',
+      });
       return;
     }
 
     if (!isValidDisplayName(payload?.displayName)) {
-      socket.emit('error', { message: 'Display name must be 2-24 characters long.' });
+      socket.emit('error', {
+        message: 'Display name must be 2-24 characters long.',
+      });
       return;
     }
 
     const previous = activeUsers.get(socket.id);
+
     if (previous) {
       detachUser(socket.id);
+      socket.leave(previous.officeId);
     }
 
     const user = {
@@ -210,15 +327,17 @@ io.on('connection', (socket) => {
       displayName: payload.displayName.trim(),
       avatarColor: normalizeColor(payload?.avatarColor),
       officeId,
-      x: 180 + (Math.random() * 260),
-      y: 160 + (Math.random() * 220),
+      x: 180 + Math.random() * 260,
+      y: 160 + Math.random() * 220,
       socketId: socket.id,
     };
 
     const room = activeRooms.get(officeId) || new Map();
+
     room.set(socket.id, user);
     activeRooms.set(officeId, room);
     activeUsers.set(socket.id, user);
+
     socket.join(officeId);
 
     logInfo('User joined office', {
@@ -228,12 +347,15 @@ io.on('connection', (socket) => {
     });
 
     const participants = getRoomMembers(officeId);
+
     socket.emit('office:joined', {
       officeId,
       user,
       participants,
     });
+
     socket.to(officeId).emit('avatar:joined', user);
+
     socket.to(officeId).emit('office:presence', {
       officeId,
       participants,
@@ -242,12 +364,18 @@ io.on('connection', (socket) => {
 
   socket.on('office:move', (payload) => {
     const user = activeUsers.get(socket.id);
+
     if (!user) {
-      socket.emit('error', { message: 'You are not currently in an office.' });
+      socket.emit('error', {
+        message: 'You are not currently in an office.',
+      });
       return;
     }
 
-    const officeId = String(payload?.officeId || user.officeId).trim();
+    const officeId = String(
+      payload?.officeId || user.officeId,
+    ).trim();
+
     const localX = Number(payload?.x);
     const localY = Number(payload?.y);
     const nextPosition = sanitizePosition(localX, localY);
@@ -273,32 +401,36 @@ io.on('connection', (socket) => {
   });
 
   socket.on('office:leave', (payload) => {
-    const officeId = payload?.officeId || config.officeId;
     const user = activeUsers.get(socket.id);
-
-    if (!user) {
-      return;
-    }
+    if (!user) return;
 
     const currentOfficeId = user.officeId;
-    const targetOfficeId = String(officeId).trim() || currentOfficeId;
+    const requestedOfficeId = String(
+      payload?.officeId || currentOfficeId,
+    ).trim();
 
-    if (targetOfficeId === currentOfficeId) {
-      socket.to(targetOfficeId).emit('avatar:left', {
+    if (requestedOfficeId === currentOfficeId) {
+      socket.to(currentOfficeId).emit('avatar:left', {
         id: user.id,
-        officeId: targetOfficeId,
+        officeId: currentOfficeId,
       });
     }
 
     detachUser(socket.id);
-    socket.leave(targetOfficeId);
-    socket.emit('office:left', { officeId: targetOfficeId });
+    socket.leave(currentOfficeId);
+
+    socket.emit('office:left', {
+      officeId: currentOfficeId,
+    });
   });
 
   socket.on('disconnect', () => {
     const user = activeUsers.get(socket.id);
+
     if (!user) {
-      logInfo('Client disconnected without office membership', { socketId: socket.id });
+      logInfo('Client disconnected without office membership', {
+        socketId: socket.id,
+      });
       return;
     }
 
@@ -314,6 +446,7 @@ io.on('connection', (socket) => {
 
 app.use((error, _req, res, _next) => {
   console.error('[proxispeak] unhandled error', error);
+
   res.status(500).json({
     message: 'Internal server error',
   });
@@ -323,8 +456,12 @@ const PORT = config.port;
 
 async function startServer() {
   await connectMongo();
+
   httpServer.listen(PORT, () => {
-    logInfo('Server listening', { port: PORT, environment: process.env.NODE_ENV || 'development' });
+    logInfo('Server listening', {
+      port: PORT,
+      environment: process.env.NODE_ENV || 'development',
+    });
   });
 }
 
