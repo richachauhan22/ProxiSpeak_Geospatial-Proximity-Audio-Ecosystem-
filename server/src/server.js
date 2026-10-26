@@ -11,6 +11,7 @@ import {
   queryNearbyUsers,
   groupUsersByProximity,
 } from './userLocationSchema.js';
+import { validateVisualGraphPayload } from './graphValidator.js';
 
 export const WEBRTC_PROXIMITY_RADIUS = 100;
 
@@ -31,6 +32,7 @@ const dbState = {
 
 const activeUsers = new Map();
 const activeRooms = new Map();
+const activeGraphs = new Map();
 
 const avatarSize = 18;
 
@@ -268,6 +270,61 @@ app.get('/api/offices/:officeId/groups', async (req, res) => {
     radius,
     groupCount: groups.length,
     groups,
+  });
+});
+
+// Graph Serialization: Ingest, validate, and store serialized visual graph from frontend
+app.post('/api/offices/:officeId/graph', (req, res) => {
+  const officeId = req.params.officeId || config.officeId;
+  const rawBody = req.body;
+
+  const result = validateVisualGraphPayload(rawBody, {
+    bounds: { width: config.worldWidth, height: config.worldHeight },
+  });
+
+  if (!result.isValid) {
+    return res.status(400).json({
+      success: false,
+      message: 'Visual graph validation failed',
+      errors: result.errors,
+    });
+  }
+
+  activeGraphs.set(officeId, {
+    graph: result.graph,
+    receivedAt: new Date().toISOString(),
+  });
+
+  logInfo('Visual graph ingested and stored', {
+    officeId,
+    totalNodes: result.summary.totalNodes,
+    totalEdges: result.summary.totalEdges,
+    clusters: result.summary.clusterCount,
+  });
+
+  return res.status(200).json({
+    success: true,
+    message: 'Visual graph successfully validated and stored',
+    summary: result.summary,
+    receivedAt: new Date().toISOString(),
+  });
+});
+
+// Retrieve latest stored visual graph for an office
+app.get('/api/offices/:officeId/graph', (req, res) => {
+  const officeId = req.params.officeId || config.officeId;
+  const stored = activeGraphs.get(officeId);
+
+  if (!stored) {
+    return res.status(404).json({
+      success: false,
+      message: `No visual graph found for office '${officeId}'`,
+    });
+  }
+
+  return res.status(200).json({
+    success: true,
+    ...stored,
   });
 });
 
@@ -533,4 +590,4 @@ async function startServer() {
 
 startServer();
 
-export { app, io, activeUsers, activeRooms };
+export { app, io, activeUsers, activeRooms, activeGraphs };

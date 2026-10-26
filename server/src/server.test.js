@@ -5,6 +5,7 @@ import {
   UserLocationModel,
 } from './userLocationSchema.js';
 import { WEBRTC_PROXIMITY_RADIUS } from './server.js';
+import { validateVisualGraphPayload } from './graphValidator.js';
 
 function validateDisplayName(value) {
   const trimmed = typeof value === 'string' ? value.trim() : '';
@@ -299,5 +300,67 @@ describe('MongoDB Proximity Calculations & $near User Grouping', () => {
 
     expect(has2dIndex).toBe(true);
     expect(has2dsphereIndex).toBe(true);
+  });
+});
+
+describe('Graph Serialization Backend Ingestion & REST Route Handlers', () => {
+  it('accepts and validates serialized visual graph payloads into valid stored graphs', () => {
+    const activeGraphs = new Map();
+    const officeId = 'oVice-HQ';
+
+    const validPayload = {
+      metadata: {
+        version: '1.0.0',
+        officeId,
+        exportedAt: new Date().toISOString(),
+        dimensions: { width: 1440, height: 894 },
+      },
+      nodes: [
+        { id: 'u1', type: 'avatar', label: 'User 1', position: { x: 100, y: 150 } },
+        { id: 'u2', type: 'avatar', label: 'User 2', position: { x: 160, y: 150 } },
+      ],
+      edges: [
+        {
+          id: 'edge-u1--u2',
+          source: 'u1',
+          target: 'u2',
+          type: 'proximity_audio',
+          distance: 60,
+          spatialAudio: { volume: 1.0, stereoPan: 0.21, inAudibleRange: true, inWebrtcRange: true },
+        },
+      ],
+      clusters: [
+        { clusterId: 'c1', size: 2, memberIds: ['u1', 'u2'] },
+      ],
+    };
+
+    function handlePostGraph(reqOfficeId, rawBody) {
+      const result = validateVisualGraphPayload(rawBody);
+      if (!result.isValid) {
+        return { status: 400, body: { success: false, errors: result.errors } };
+      }
+      activeGraphs.set(reqOfficeId, { graph: result.graph, receivedAt: new Date().toISOString() });
+      return { status: 200, body: { success: true, summary: result.summary } };
+    }
+
+    // 1. Send JSON string (as transmitted over HTTP from client)
+    const jsonString = JSON.stringify(validPayload);
+    const postRes = handlePostGraph(officeId, jsonString);
+
+    expect(postRes.status).toBe(200);
+    expect(postRes.body.success).toBe(true);
+    expect(postRes.body.summary.totalNodes).toBe(2);
+    expect(postRes.body.summary.totalEdges).toBe(1);
+
+    // 2. Stored entry exists in activeGraphs
+    expect(activeGraphs.has(officeId)).toBe(true);
+    const stored = activeGraphs.get(officeId);
+    expect(stored.graph.nodes.length).toBe(2);
+
+    // 3. Send invalid graph payload
+    const badRes = handlePostGraph(officeId, '{ invalid json');
+    expect(badRes.status).toBe(400);
+    expect(badRes.body.success).toBe(false);
+    expect(badRes.body.errors[0]).toMatch(/JSON syntax error/);
   });
 });

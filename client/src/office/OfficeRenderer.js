@@ -1,5 +1,6 @@
 import { AvatarRenderer } from './AvatarRenderer';
 import { OFFICE_DIMENSIONS } from './OfficeMap';
+import { buildVisualGraph, serializeVisualGraph } from './visualGraphSerializer';
 
 export class OfficeRenderer {
   constructor({ ctx, width, height, zoom = 100, panX = 0, panY = 0 }) {
@@ -201,5 +202,29 @@ export class OfficeRenderer {
         isLocal: user.isLocal,
       });
     }
+  }
+
+  /**
+   * Constructs the structured visual graph representation of the current rendered scene.
+   */
+  getVisualGraph(localUser, participants = [], officeId = 'office-1') {
+    return buildVisualGraph({
+      localUser,
+      participants,
+      officeId,
+      viewport: { zoom: this.zoom, panX: this.panX, panY: this.panY },
+    });
+  }
+
+  /**
+   * Serializes the current visual canvas scene into a valid JSON string for backend transmission.
+   */
+  serializeScene(localUser, participants = [], officeId = 'office-1', options = {}) {
+    return serializeVisualGraph({
+      localUser,
+      participants,
+      officeId,
+      viewport: { zoom: this.zoom, panX: this.panX, panY: this.panY },
+    }, options);
   }
 }
