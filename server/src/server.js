@@ -12,6 +12,8 @@ import {
   groupUsersByProximity,
 } from './userLocationSchema.js';
 import { validateVisualGraphPayload } from './graphValidator.js';
+import { runIngestionAuditBenchmark, formatAuditSummary } from './telemetryIngestionAudit.js';
+import { ensureTimeSeriesCollection, SpatialTelemetryModel } from './spatialTelemetrySchema.js';
 
 export const WEBRTC_PROXIMITY_RADIUS = 100;
 
@@ -169,6 +171,7 @@ async function connectMongo() {
     dbState.status = 'connected';
     logInfo('MongoDB connected', { uri: config.mongoUri });
     await ensureOfficeSeed();
+    await ensureTimeSeriesCollection(mongoose.connection?.db);
   } catch (error) {
     dbState.connected = false;
     dbState.status = 'disconnected';
@@ -325,6 +328,30 @@ app.get('/api/offices/:officeId/graph', (req, res) => {
   return res.status(200).json({
     success: true,
     ...stored,
+  });
+});
+
+// Telemetry Ingestion Audit: Demonstrate 5,000 writes/sec and minimal storage footprint
+app.get('/api/telemetry/audit', async (req, res) => {
+  const totalWrites = Number(req.query.totalWrites || 5000);
+  const batchSize = Number(req.query.batchSize || 500);
+
+  const isMongoReady = mongoose.connection?.readyState === 1;
+  const modelToUse = isMongoReady ? SpatialTelemetryModel : null;
+
+  const result = await runIngestionAuditBenchmark({
+    totalWrites,
+    batchSize,
+    officeId: config.officeId,
+    model: modelToUse,
+  });
+
+  const formattedReport = formatAuditSummary(result);
+
+  res.json({
+    status: 'audit_completed',
+    metrics: result,
+    report: formattedReport,
   });
 });
 
