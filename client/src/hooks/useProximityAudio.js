@@ -25,6 +25,10 @@ export function useProximityAudio({
   const syncNearbyRef = useRef(null);
   const latestRef = useRef({});
 
+
+   // Week 3: Web Audio API refs
+  const audioContextRef = useRef(null);
+  const audioNodesRef = useRef(new Map());
   const [micStatus, setMicStatus] = useState('off');
   const [audioError, setAudioError] = useState('');
 
@@ -46,29 +50,34 @@ export function useProximityAudio({
 
     let disposed = false;
 
-    function closePeer(userId) {
-      const pc = peerConnectionsRef.current.get(userId);
+  function closePeer(userId) {
+  const pc = peerConnectionsRef.current.get(userId);
 
-      if (pc) {
-        pc.onicecandidate = null;
-        pc.ontrack = null;
-        pc.onconnectionstatechange = null;
-        pc.close();
-        peerConnectionsRef.current.delete(userId);
-      }
+  if (pc) {
+    pc.onicecandidate = null;
+    pc.ontrack = null;
+    pc.onconnectionstatechange = null;
+    pc.close();
+    peerConnectionsRef.current.delete(userId);
+  }
 
-      offersInProgressRef.current.delete(userId);
-      pendingCandidatesRef.current.delete(userId);
+  offersInProgressRef.current.delete(userId);
+  pendingCandidatesRef.current.delete(userId);
 
-      const audio = audioElementsRef.current.get(userId);
+  const nodes = audioNodesRef.current.get(userId);
 
-      if (audio) {
-        audio.pause();
-        audio.srcObject = null;
-        audio.remove();
-        audioElementsRef.current.delete(userId);
-      }
+  if (nodes) {
+    try {
+      nodes.source.disconnect();
+      nodes.gain.disconnect();
+    } catch (error) {
+      console.warn('Audio node cleanup:', error);
     }
+
+    audioNodesRef.current.delete(userId);
+  }
+}
+
 
     function createPeer(userId) {
       let pc = peerConnectionsRef.current.get(userId);
@@ -95,35 +104,89 @@ export function useProximityAudio({
         }
       };
 
-      pc.ontrack = (event) => {
-        if (disposed) return;
+    pc.ontrack = async (event) => {
+  if (disposed) return;
 
-        let audio = audioElementsRef.current.get(userId);
+  const remoteStream = event.streams?.[0];
+  if (!remoteStream) return;
 
-        if (!audio) {
-          audio = document.createElement('audio');
-          audio.autoplay = true;
-          audio.playsInline = true;
-          audio.setAttribute('aria-label', 'Participant voice');
+  try {
+    const AudioContextClass =
+      window.AudioContext || window.webkitAudioContext;
 
-          document.body.appendChild(audio);
-          audioElementsRef.current.set(userId, audio);
-        }
+    if (!AudioContextClass) {
+      throw new Error('Web Audio API is not supported.');
+    }
 
-        const remoteStream = event.streams?.[0];
+    if (!audioContextRef.current) {
+      audioContextRef.current = new AudioContextClass();
+    }
 
-        if (remoteStream) {
-          audio.srcObject = remoteStream;
+    const audioContext = audioContextRef.current;
 
-          audio.play().then(() => {
-            setAudioError('');
-          }).catch(() => {
-            setAudioError(
-              'Audio playback blocked. Click the page and allow audio playback.'
-            );
-          });
-        }
-      };
+    let nodes = audioNodesRef.current.get(userId);
+
+    if (!nodes) {
+      const source =
+        audioContext.createMediaStreamSource(remoteStream);
+      const gain = audioContext.createGain();
+
+      source.connect(gain);
+      gain.connect(audioContext.destination);
+
+      nodes = { source, gain };
+      audioNodesRef.current.set(userId, nodes);
+    }
+
+    // Set the initial volume using current avatar positions.
+    const { localUser, participants } = latestRef.current;
+
+    const participant = (participants || []).find(
+      (person) => String(person.id) === String(userId)
+    );
+
+    let volume = 0;
+
+    if (
+      localUser &&
+      participant &&
+      Number.isFinite(localUser.x) &&
+      Number.isFinite(localUser.y) &&
+      Number.isFinite(participant.x) &&
+      Number.isFinite(participant.y)
+    ) {
+      const dx = localUser.x - participant.x;
+      const dy = localUser.y - participant.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      volume = Math.max(
+        0,
+        Math.min(1, 1 - distance / PROXIMITY_RADIUS)
+      );
+    }
+
+    nodes.gain.gain.setValueAtTime(
+      volume,
+      audioContext.currentTime
+    );
+
+    if (audioContext.state === 'suspended') {
+      await audioContext.resume();
+    }
+
+    if (disposed) {
+      closePeer(userId);
+      return;
+    }
+
+    setAudioError('');
+  } catch (error) {
+    console.error('Web Audio setup error:', error);
+    setAudioError(
+      error?.message || 'Unable to initialize remote audio.'
+    );
+  }
+};
 
       pc.onconnectionstatechange = () => {
         if (
@@ -435,36 +498,48 @@ export function useProximityAudio({
   }, [nearbyParticipants, enabled, localUser?.id]);
 
   // Adjust incoming voice volume according to avatar distance.
-  useEffect(() => {
-    const local = localUser;
+ // Adjust incoming voice volume using Web Audio API.
+useEffect(() => {
+  const local = localUser;
+  const audioContext = audioContextRef.current;
 
-    audioElementsRef.current.forEach((audio, userId) => {
-      const participant = (participants || []).find(
-        (person) => String(person.id) === String(userId)
-      );
+  if (!audioContext) return;
 
-      if (
-        !local ||
-        !participant ||
-        !Number.isFinite(local.x) ||
-        !Number.isFinite(local.y) ||
-        !Number.isFinite(participant.x) ||
-        !Number.isFinite(participant.y)
-      ) {
-        audio.volume = 0;
-        return;
-      }
+  audioNodesRef.current.forEach((nodes, userId) => {
+    const participant = (participants || []).find(
+      (person) => String(person.id) === String(userId)
+    );
 
+    let volume = 0;
+
+    if (
+      local &&
+      participant &&
+      Number.isFinite(local.x) &&
+      Number.isFinite(local.y) &&
+      Number.isFinite(participant.x) &&
+      Number.isFinite(participant.y)
+    ) {
       const dx = local.x - participant.x;
       const dy = local.y - participant.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
 
-      audio.volume =
+      volume =
         distance >= PROXIMITY_RADIUS
           ? 0
-          : Math.max(0, Math.min(1, 1 - distance / PROXIMITY_RADIUS));
-    });
-  }, [localUser, participants, nearbyParticipants]);
+          : Math.max(
+              0,
+              Math.min(1, 1 - distance / PROXIMITY_RADIUS)
+            );
+    }
 
+    // Smooth volume transition instead of sudden changes.
+    nodes.gain.gain.setTargetAtTime(
+      volume,
+      audioContext.currentTime,
+      0.08
+    );
+  });
+}, [localUser, participants, nearbyParticipants]);
   return { micStatus, audioError };
 }
