@@ -1,5 +1,79 @@
 import React, { useState } from 'react';
 import { sounds } from '../services/soundEffects';
+import { calculateSpatialVolume } from '../services/webrtcManager';
+
+function AttenuationCurveGraph({ minDistance = 60, maxDistance = 280, model = 'linear', rolloffFactor = 1.0 }) {
+  const width = 340;
+  const height = 110;
+  const padding = { top: 14, right: 14, bottom: 22, left: 36 };
+  const graphW = width - padding.left - padding.right;
+  const graphH = height - padding.top - padding.bottom;
+
+  const points = [];
+  const steps = 40;
+  for (let i = 0; i <= steps; i++) {
+    const d = (i / steps) * maxDistance;
+    const vol = calculateSpatialVolume(d, { minDistance, maxDistance, attenuationModel: model, rolloffFactor });
+    const x = padding.left + (d / maxDistance) * graphW;
+    const y = padding.top + (1 - vol) * graphH;
+    points.push({ x, y, d, vol });
+  }
+
+  const pathD = points.reduce((acc, pt, idx) => `${acc} ${idx === 0 ? 'M' : 'L'} ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`, '');
+  const areaD = `${pathD} L ${(padding.left + graphW).toFixed(1)} ${(padding.top + graphH).toFixed(1)} L ${padding.left.toFixed(1)} ${(padding.top + graphH).toFixed(1)} Z`;
+
+  const probeDist = Math.round(minDistance + (maxDistance - minDistance) * 0.42);
+  const probeVol = calculateSpatialVolume(probeDist, { minDistance, maxDistance, attenuationModel: model, rolloffFactor });
+  const probeX = padding.left + (probeDist / maxDistance) * graphW;
+  const probeY = padding.top + (1 - probeVol) * graphH;
+
+  return (
+    <div className="attenuation-curve-card" style={{ background: '#f8fafc', borderRadius: '10px', padding: '10px', border: '1px solid #e2e8f0', marginTop: '12px', marginBottom: '8px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', fontSize: '11px', fontWeight: '700', color: '#475569' }}>
+        <span>📈 DYNAMIC ATTENUATION CURVE</span>
+        <span style={{ color: '#2563eb' }}>{probeDist}px ➔ {Math.round(probeVol * 100)}% vol</span>
+      </div>
+      <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} style={{ overflow: 'visible' }}>
+        <defs>
+          <linearGradient id="curveGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#2563eb" stopOpacity="0.32" />
+            <stop offset="100%" stopColor="#2563eb" stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+        <line x1={padding.left} y1={padding.top} x2={padding.left + graphW} y2={padding.top} stroke="#e2e8f0" strokeDasharray="3 3" />
+        <line x1={padding.left} y1={padding.top + graphH / 2} x2={padding.left + graphW} y2={padding.top + graphH / 2} stroke="#e2e8f0" strokeDasharray="3 3" />
+        <line x1={padding.left} y1={padding.top + graphH} x2={padding.left + graphW} y2={padding.top + graphH} stroke="#cbd5e1" strokeWidth="1.5" />
+        <line x1={padding.left} y1={padding.top} x2={padding.left} y2={padding.top + graphH} stroke="#cbd5e1" strokeWidth="1.5" />
+
+        {minDistance < maxDistance && (
+          <line
+            x1={padding.left + (minDistance / maxDistance) * graphW}
+            y1={padding.top}
+            x2={padding.left + (minDistance / maxDistance) * graphW}
+            y2={padding.top + graphH}
+            stroke="#10b981"
+            strokeDasharray="2 2"
+            strokeWidth="1.2"
+          />
+        )}
+
+        <path d={areaD} fill="url(#curveGradient)" />
+        <path d={pathD} fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx={probeX} cy={probeY} r="4" fill="#2563eb" stroke="#ffffff" strokeWidth="2" />
+
+        <text x={padding.left - 4} y={padding.top + 4} fill="#64748b" fontSize="9" textAnchor="end">100%</text>
+        <text x={padding.left - 4} y={padding.top + graphH / 2 + 3} fill="#64748b" fontSize="9" textAnchor="end">50%</text>
+        <text x={padding.left - 4} y={padding.top + graphH + 3} fill="#64748b" fontSize="9" textAnchor="end">0%</text>
+
+        <text x={padding.left} y={height - 6} fill="#64748b" fontSize="9" textAnchor="start">0px</text>
+        {minDistance > 0 && minDistance < maxDistance && (
+          <text x={padding.left + (minDistance / maxDistance) * graphW} y={height - 6} fill="#10b981" fontSize="9" textAnchor="middle">{minDistance}px</text>
+        )}
+        <text x={padding.left + graphW} y={height - 6} fill="#64748b" fontSize="9" textAnchor="end">{maxDistance}px</text>
+      </svg>
+    </div>
+  );
+}
 
 export function CalendarModal({ isOpen, onClose, onJoinMeetingArea }) {
   if (!isOpen) return null;
@@ -161,16 +235,40 @@ export function SettingsModal({
   onLeaveOffice,
   proximityDistance = 240,
   onProximityChange,
+  spatialConfig = null,
+  onSpatialConfigChange = null,
   audioLevel = 0,
   isMuted = false,
   permissionStatus = 'idle',
   onRequestMic,
 }) {
-  const [localDistance, setLocalDistance] = useState(proximityDistance);
-  const [spatialAudioEnabled, setSpatialAudioEnabled] = useState(true);
+  const [localDistance, setLocalDistance] = useState(spatialConfig?.maxDistance ?? proximityDistance);
+  const [minDistance, setMinDistance] = useState(spatialConfig?.minDistance ?? 60);
+  const [attenuationModel, setAttenuationModel] = useState(spatialConfig?.attenuationModel ?? 'linear');
+  const [rolloffFactor, setRolloffFactor] = useState(spatialConfig?.rolloffFactor ?? 1.0);
+  const [airDamping, setAirDamping] = useState(spatialConfig?.airDamping !== false);
+  const [occlusionEnabled, setOcclusionEnabled] = useState(spatialConfig?.occlusionEnabled !== false);
+  const [spatialAudioEnabled, setSpatialAudioEnabled] = useState(spatialConfig?.panEnabled !== false);
   const [soundEffectsEnabled, setSoundEffectsEnabled] = useState(true);
   const [audioDevices, setAudioDevices] = useState([]);
   const [selectedDevice, setSelectedDevice] = useState('default');
+
+  const emitConfigChange = (updates = {}) => {
+    const nextConfig = {
+      minDistance,
+      maxDistance: localDistance,
+      attenuationModel,
+      rolloffFactor,
+      airDamping,
+      occlusionEnabled,
+      panEnabled: spatialAudioEnabled,
+      ...updates,
+    };
+    onSpatialConfigChange?.(nextConfig);
+    if ('maxDistance' in updates) {
+      onProximityChange?.(updates.maxDistance);
+    }
+  };
 
   React.useEffect(() => {
     if (isOpen && navigator?.mediaDevices?.enumerateDevices) {
@@ -193,7 +291,7 @@ export function SettingsModal({
             <span className="modal-icon">⚙️</span>
             <div>
               <h3>Workspace & Audio Settings</h3>
-              <span className="modal-subtitle">Configure WebRTC devices and spatial parameters</span>
+              <span className="modal-subtitle">Web Audio API dynamic attenuation & WebRTC configuration</span>
             </div>
           </div>
           <button type="button" className="modal-close" onClick={onClose}>✕</button>
@@ -263,27 +361,107 @@ export function SettingsModal({
             </select>
           </div>
 
-          <div className="setting-group">
-            <div className="slider-label-row">
-              <label htmlFor="proximity-falloff-slider">Spatial Proximity Audio Falloff</label>
-              <strong>{localDistance} px radius</strong>
+          {/* Dynamic Attenuation Section */}
+          <div className="setting-group" style={{ background: '#f8fafc', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <span style={{ fontSize: '13px', fontWeight: '800', color: '#1e293b' }}>
+                🎛️ DYNAMIC AUDIO ATTENUATION ENGINE
+              </span>
+              <span style={{ fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '999px', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe' }}>
+                Web Audio API
+              </span>
             </div>
-            <input
-              id="proximity-falloff-slider"
-              type="range"
-              min="100"
-              max="400"
-              value={localDistance}
-              onChange={(e) => {
-                const val = Number(e.target.value);
-                setLocalDistance(val);
-                onProximityChange?.(val);
-              }}
-              className="modern-range-slider"
+
+            {/* Model Selection */}
+            <div style={{ marginBottom: '10px' }}>
+              <label htmlFor="attenuation-model-select" style={{ fontSize: '12px', fontWeight: '600', color: '#334155', display: 'block', marginBottom: '4px' }}>
+                Distance Falloff Algorithm
+              </label>
+              <select
+                id="attenuation-model-select"
+                className="setting-select"
+                value={attenuationModel}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setAttenuationModel(val);
+                  emitConfigChange({ attenuationModel: val });
+                }}
+              >
+                <option value="linear">Linear Drop-off (Uniform dB/px)</option>
+                <option value="exponential">Exponential Drop-off (Perceptual dB Logarithmic)</option>
+                <option value="inverse">Inverse Distance (Physical 1/r Wave)</option>
+                <option value="smoothstep">Smoothstep S-Curve (Hermite Smooth)</option>
+              </select>
+            </div>
+
+            {/* Full-volume core radius picker */}
+            <div style={{ marginBottom: '12px' }}>
+              <div className="slider-label-row">
+                <span style={{ fontSize: '12px', fontWeight: '600', color: '#334155' }}>
+                  Full-Volume Core Radius (d_min)
+                </span>
+                <strong style={{ fontSize: '12px', color: '#10b981' }}>{minDistance} px</strong>
+              </div>
+              <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+                {[30, 60, 90, 120].map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => {
+                      setMinDistance(r);
+                      emitConfigChange({ minDistance: r });
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: '5px 8px',
+                      fontSize: '11px',
+                      fontWeight: minDistance === r ? '700' : '500',
+                      borderRadius: '6px',
+                      border: minDistance === r ? '1px solid #10b981' : '1px solid #cbd5e1',
+                      background: minDistance === r ? '#ecfdf5' : '#ffffff',
+                      color: minDistance === r ? '#065f46' : '#475569',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {r} px {r === 60 ? '(Default)' : ''}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Proximity Max Distance Slider */}
+            <div>
+              <div className="slider-label-row">
+                <label htmlFor="proximity-falloff-slider">Spatial Proximity Audio Falloff</label>
+                <strong>{localDistance} px radius</strong>
+              </div>
+              <input
+                id="proximity-falloff-slider"
+                type="range"
+                min="100"
+                max="400"
+                value={localDistance}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  setLocalDistance(val);
+                  onProximityChange?.(val);
+                  emitConfigChange({ maxDistance: val });
+                }}
+                className="modern-range-slider"
+              />
+              <span className="setting-help" style={{ marginTop: '4px', display: 'block' }}>
+                Controls the physical boundary in pixels where your avatar transitions smoothly to complete silence.
+              </span>
+            </div>
+
+            {/* Real-time curve graph */}
+            <AttenuationCurveGraph
+              minDistance={minDistance}
+              maxDistance={localDistance}
+              model={attenuationModel}
+              rolloffFactor={rolloffFactor}
             />
-            <span className="setting-help">
-              Controls the physical radius in pixels where your avatar begins hearing nearby conversations.
-            </span>
           </div>
 
           <div className="settings-toggle-grid">
@@ -295,7 +473,42 @@ export function SettingsModal({
               <input
                 type="checkbox"
                 checked={spatialAudioEnabled}
-                onChange={(e) => setSpatialAudioEnabled(e.target.checked)}
+                onChange={(e) => {
+                  setSpatialAudioEnabled(e.target.checked);
+                  emitConfigChange({ panEnabled: e.target.checked });
+                }}
+                className="modern-switch"
+              />
+            </div>
+
+            <div className="toggle-item">
+              <div>
+                <strong>Acoustic Air Damping (Lowpass)</strong>
+                <p>Rolls off high frequencies with distance for acoustic realism</p>
+              </div>
+              <input
+                type="checkbox"
+                checked={airDamping}
+                onChange={(e) => {
+                  setAirDamping(e.target.checked);
+                  emitConfigChange({ airDamping: e.target.checked });
+                }}
+                className="modern-switch"
+              />
+            </div>
+
+            <div className="toggle-item">
+              <div>
+                <strong>Obstacle & Wall Occlusion</strong>
+                <p>Muffles audio when cubicles or partitions obstruct line of sight</p>
+              </div>
+              <input
+                type="checkbox"
+                checked={occlusionEnabled}
+                onChange={(e) => {
+                  setOcclusionEnabled(e.target.checked);
+                  emitConfigChange({ occlusionEnabled: e.target.checked });
+                }}
                 className="modern-switch"
               />
             </div>

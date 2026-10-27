@@ -18,7 +18,7 @@ import {
   QuickToolsModal,
   LeaveConfirmModal,
 } from './components/OfficeModals';
-import { DEFAULT_LOCAL_USER, DEFAULT_OFFICE_PARTICIPANTS } from './office/OfficeMap';
+import { DEFAULT_LOCAL_USER, DEFAULT_OFFICE_PARTICIPANTS, OFFICE_OBSTACLES } from './office/OfficeMap';
 import { sounds } from './services/soundEffects';
 
 function App() {
@@ -58,6 +58,16 @@ function App() {
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
   const [miniMapOpen, setMiniMapOpen] = useState(false);
   const [proximityDistance, setProximityDistance] = useState(240);
+  const [spatialConfig, setSpatialConfig] = useState({
+    minDistance: 60,
+    maxDistance: 240,
+    attenuationModel: 'linear', // 'linear' | 'exponential' | 'inverse' | 'smoothstep'
+    rolloffFactor: 1.0,
+    airDamping: true,
+    occlusionEnabled: true,
+    panEnabled: true,
+    proximityRadius: 100,
+  });
 
   // Video toggle
   const [isVideoOn, setIsVideoOn] = useState(true);
@@ -107,10 +117,8 @@ function App() {
     localUser,
     participants,
     enabled: isOfficeActive,
-    spatialConfig: {
-      maxDistance: proximityDistance,
-      proximityRadius: 100,
-    },
+    spatialConfig,
+    obstacles: OFFICE_OBSTACLES,
   });
 
   useEffect(() => {
@@ -470,6 +478,7 @@ function App() {
               panY={panPosition.y}
               onPanChange={(x, y) => setPanPosition({ x, y })}
               recenterTrigger={recenterCount}
+              spatialConfig={spatialConfig}
             />
 
             {/* Floating Emojis */}
@@ -555,8 +564,13 @@ function App() {
               isOpen={settingsOpen}
               onClose={() => setSettingsOpen(false)}
               onLeaveOffice={() => setLeaveConfirmOpen(true)}
-              proximityDistance={proximityDistance}
-              onProximityChange={setProximityDistance}
+              proximityDistance={spatialConfig.maxDistance}
+              onProximityChange={(d) => {
+                setProximityDistance(d);
+                setSpatialConfig((prev) => ({ ...prev, maxDistance: d }));
+              }}
+              spatialConfig={spatialConfig}
+              onSpatialConfigChange={setSpatialConfig}
               audioLevel={audioLevel}
               isMuted={isMuted}
               permissionStatus={permissionStatus}

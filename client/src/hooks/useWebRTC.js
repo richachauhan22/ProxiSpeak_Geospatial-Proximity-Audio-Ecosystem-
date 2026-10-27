@@ -26,6 +26,7 @@ export function useWebRTC({
   participants = [],
   enabled = false,
   spatialConfig,
+  obstacles = [],
 } = {}) {
   const managerRef = useRef(null);
   const [managerInstance, setManagerInstance] = useState(null);
@@ -255,11 +256,22 @@ export function useWebRTC({
     }
   }, [enabled, participants, localUser?.id, localUser?.x, localUser?.y, spatialConfig?.proximityRadius]);
 
+  // Update manager's spatial config dynamically if altered
+  useEffect(() => {
+    if (managerRef.current && spatialConfig) {
+      managerRef.current.updateSpatialConfig?.(spatialConfig);
+    }
+  }, [spatialConfig]);
+
   // Continuously synchronize spatial audio based on positions
   useEffect(() => {
     if (!enabled || !managerRef.current || !localUser) return;
-    managerRef.current.updateSpatialAudio(localUser, participants);
-  }, [enabled, localUser?.x, localUser?.y, participants]);
+    if (obstacles && obstacles.length > 0) {
+      managerRef.current.updateSpatialAudio(localUser, participants, obstacles);
+    } else {
+      managerRef.current.updateSpatialAudio(localUser, participants);
+    }
+  }, [enabled, localUser?.x, localUser?.y, participants, obstacles, spatialConfig]);
 
   return {
     localStream,

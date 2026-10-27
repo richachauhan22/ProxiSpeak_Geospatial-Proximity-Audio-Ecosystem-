@@ -4,6 +4,12 @@ import {
   WebRTCManager,
   calculateSpatialVolume,
   calculateSpatialPan,
+  calculateLinearVolume,
+  calculateExponentialVolume,
+  calculateInverseVolume,
+  calculateSmoothstepVolume,
+  calculateAirDampingCutoff,
+  calculateObstacleOcclusion,
   DEFAULT_RTC_CONFIG,
   DEFAULT_SPATIAL_CONFIG,
 } from './webrtcManager';
@@ -46,6 +52,78 @@ describe('Spatial Audio Math Calculations', () => {
     expect(calculateSpatialPan(100, 0)).toBe(0);
     expect(calculateSpatialPan(100, -50)).toBe(0);
   });
+
+  it('calculates exponential drop-off with smooth perceptual curvature', () => {
+    expect(calculateExponentialVolume(0, 60, 280)).toBe(1.0);
+    expect(calculateExponentialVolume(60, 60, 280)).toBe(1.0);
+    expect(calculateExponentialVolume(280, 60, 280)).toBe(0.0);
+    expect(calculateExponentialVolume(300, 60, 280)).toBe(0.0);
+
+    const mid = calculateExponentialVolume(170, 60, 280, 2.5);
+    // Exponential falloff drops faster initially than linear (which is 0.5)
+    expect(mid).toBeLessThan(0.5);
+    expect(mid).toBeGreaterThan(0.2);
+  });
+
+  it('calculates inverse distance drop-off modeling physical 1/r wave expansion', () => {
+    expect(calculateInverseVolume(50, 60, 280)).toBe(1.0);
+    expect(calculateInverseVolume(60, 60, 280)).toBe(1.0);
+    expect(calculateInverseVolume(280, 60, 280)).toBe(0.0);
+
+    const mid = calculateInverseVolume(170, 60, 280, 1.0);
+    expect(mid).toBeLessThan(0.5);
+    expect(mid).toBeGreaterThan(0.25);
+  });
+
+  it('calculates smoothstep S-curve with zero derivative at boundaries', () => {
+    expect(calculateSmoothstepVolume(50, 60, 280)).toBe(1.0);
+    expect(calculateSmoothstepVolume(60, 60, 280)).toBe(1.0);
+    expect(calculateSmoothstepVolume(280, 60, 280)).toBe(0.0);
+
+    const mid = calculateSmoothstepVolume(170, 60, 280);
+    expect(mid).toBeCloseTo(0.5, 2);
+  });
+
+  it('dispatches calculateSpatialVolume correctly with options object and model names', () => {
+    const lin = calculateSpatialVolume(170, { minDistance: 60, maxDistance: 280, attenuationModel: 'linear' });
+    expect(lin).toBeCloseTo(0.5, 2);
+
+    const exp = calculateSpatialVolume(170, { minDistance: 60, maxDistance: 280, attenuationModel: 'exponential' });
+    expect(exp).toBeLessThan(0.5);
+
+    const inv = calculateSpatialVolume(170, { minDistance: 60, maxDistance: 280, attenuationModel: 'inverse' });
+    expect(inv).toBeLessThan(0.5);
+
+    const sm = calculateSpatialVolume(170, { minDistance: 60, maxDistance: 280, attenuationModel: 'smoothstep' });
+    expect(sm).toBeCloseTo(0.5, 2);
+  });
+
+  it('calculates acoustic air damping cutoff frequency over distance', () => {
+    expect(calculateAirDampingCutoff(50, 60, 280)).toBe(20000);
+    expect(calculateAirDampingCutoff(60, 60, 280)).toBe(20000);
+    expect(calculateAirDampingCutoff(280, 60, 280)).toBe(1000);
+    expect(calculateAirDampingCutoff(350, 60, 280)).toBe(1000);
+
+    const midCutoff = calculateAirDampingCutoff(170, 60, 280);
+    expect(midCutoff).toBeLessThan(20000);
+    expect(midCutoff).toBeGreaterThan(1000);
+  });
+
+  it('calculates obstacle occlusion when partition walls block line of sight', () => {
+    const p1 = { x: 100, y: 100 };
+    const p2 = { x: 400, y: 100 };
+    const wall = [{ x: 250, y: 50, width: 20, height: 100 }];
+
+    // Direct line between (100, 100) and (400, 100) passes through wall at x=250..270, y=50..150
+    expect(calculateObstacleOcclusion(p1, p2, wall, 0.5)).toBe(0.5);
+
+    // If wall is far away, no obstruction
+    const farWall = [{ x: 500, y: 500, width: 20, height: 100 }];
+    expect(calculateObstacleOcclusion(p1, p2, farWall, 0.5)).toBe(1.0);
+
+    // Empty obstacles
+    expect(calculateObstacleOcclusion(p1, p2, [])).toBe(1.0);
+  });
 });
 
 describe('WebRTCManager Core Audio & Peer Management', () => {
@@ -54,6 +132,7 @@ describe('WebRTCManager Core Audio & Peer Management', () => {
   let mockPeerConnection;
   let mockAudioContext;
   let mockGainNode;
+  let mockFilterNode;
   let mockPannerNode;
   let mockAnalyserNode;
   let mockSourceNode;
@@ -86,13 +165,20 @@ describe('WebRTCManager Core Audio & Peer Management', () => {
 
     // Mock Web Audio API
     mockGainNode = {
-      gain: { setValueAtTime: vi.fn() },
+      gain: { setValueAtTime: vi.fn(), setTargetAtTime: vi.fn() },
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+    };
+
+    mockFilterNode = {
+      type: 'lowpass',
+      frequency: { setValueAtTime: vi.fn(), setTargetAtTime: vi.fn() },
       connect: vi.fn(),
       disconnect: vi.fn(),
     };
 
     mockPannerNode = {
-      pan: { setValueAtTime: vi.fn() },
+      pan: { setValueAtTime: vi.fn(), setTargetAtTime: vi.fn() },
       connect: vi.fn(),
       disconnect: vi.fn(),
     };
@@ -117,6 +203,7 @@ describe('WebRTCManager Core Audio & Peer Management', () => {
       resume: vi.fn().mockResolvedValue(undefined),
       close: vi.fn().mockResolvedValue(undefined),
       createMediaStreamSource: vi.fn(() => mockSourceNode),
+      createBiquadFilter: vi.fn(() => mockFilterNode),
       createGain: vi.fn(() => mockGainNode),
       createStereoPanner: vi.fn(() => mockPannerNode),
       createAnalyser: vi.fn(() => mockAnalyserNode),
@@ -436,6 +523,72 @@ describe('WebRTCManager Core Audio & Peer Management', () => {
       expect.any(Number),
       mockAudioContext.currentTime,
     );
+    expect(mockFilterNode.frequency.setValueAtTime).toHaveBeenCalledWith(
+      expect.any(Number),
+      mockAudioContext.currentTime,
+    );
+
+    manager.destroy();
+  });
+
+  it('hooks WebRTC incoming audio track into complete Web Audio API pipeline with lowpass damping', () => {
+    const manager = new WebRTCManager({
+      spatialConfig: { minDistance: 60, maxDistance: 280, airDamping: true, panEnabled: true },
+    });
+    manager.getAudioContext();
+    manager.createPeer('peer-charlie', false);
+
+    mockPeerConnection.ontrack({
+      streams: [{ id: 'stream-charlie' }],
+      track: { kind: 'audio' },
+    });
+
+    const peer = manager.peers.get('peer-charlie');
+    expect(peer.sourceNode).toBeDefined();
+    expect(peer.filterNode).toBeDefined();
+    expect(peer.gainNode).toBeDefined();
+    expect(peer.pannerNode).toBeDefined();
+    expect(peer.analyserNode).toBeDefined();
+
+    // Verify chain connectivity: source -> filter -> gain -> panner -> analyser
+    expect(mockSourceNode.connect).toHaveBeenCalledWith(mockFilterNode);
+    expect(mockFilterNode.connect).toHaveBeenCalledWith(mockGainNode);
+    expect(mockGainNode.connect).toHaveBeenCalledWith(mockPannerNode);
+    expect(mockPannerNode.connect).toHaveBeenCalledWith(mockAnalyserNode);
+    expect(mockAnalyserNode.connect).toHaveBeenCalledWith(mockAudioContext.destination);
+
+    manager.destroy();
+  });
+
+  it('applies obstacle occlusion and attenuates sound when walls are in line-of-sight', () => {
+    const manager = new WebRTCManager({
+      spatialConfig: { minDistance: 60, maxDistance: 280, occlusionEnabled: true },
+    });
+    manager.getAudioContext();
+    manager.createPeer('peer-alice', false);
+
+    mockPeerConnection.ontrack({
+      streams: [{ id: 'stream-alice' }],
+      track: { kind: 'audio' },
+    });
+
+    const obstacles = [{ x: 150, y: 50, width: 20, height: 100 }];
+    // Local user at (100, 100), Alice at (200, 100) -> line crosses obstacle
+    manager.updateSpatialAudio({ x: 100, y: 100 }, [{ id: 'peer-alice', x: 200, y: 100 }], obstacles);
+
+    const peer = manager.peers.get('peer-alice');
+    expect(peer.isOccluded).toBe(true);
+
+    manager.destroy();
+  });
+
+  it('updates spatial config dynamically at runtime', () => {
+    const manager = new WebRTCManager();
+    expect(manager.spatialConfig.attenuationModel).toBe('linear');
+
+    manager.updateSpatialConfig({ attenuationModel: 'exponential', minDistance: 80 });
+    expect(manager.spatialConfig.attenuationModel).toBe('exponential');
+    expect(manager.spatialConfig.minDistance).toBe(80);
 
     manager.destroy();
   });

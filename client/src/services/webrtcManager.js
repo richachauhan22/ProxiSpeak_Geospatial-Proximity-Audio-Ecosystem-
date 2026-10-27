@@ -16,12 +16,140 @@ export const DEFAULT_SPATIAL_CONFIG = {
   minDistance: 60, // full volume within 60px
   maxDistance: 280, // silent beyond 280px
   panEnabled: true,
+  attenuationModel: 'linear', // 'linear' | 'exponential' | 'inverse' | 'smoothstep'
+  rolloffFactor: 1.0,
+  airDamping: true, // acoustic lowpass filter based on distance
+  occlusionEnabled: true, // sound dampening behind partition walls
+  proximityRadius: 100,
 };
 
-export function calculateSpatialVolume(distance, minDistance = 60, maxDistance = 280) {
+/**
+ * Linear volume drop-off: V(d) = 1 - (d - min) / (max - min)
+ */
+export function calculateLinearVolume(distance, minDistance = 60, maxDistance = 280) {
   if (distance <= minDistance) return 1.0;
-  if (distance >= maxDistance) return 0.0;
+  if (distance >= maxDistance || minDistance >= maxDistance) return distance <= minDistance ? 1.0 : 0.0;
   return Math.max(0, Math.min(1, 1 - (distance - minDistance) / (maxDistance - minDistance)));
+}
+
+/**
+ * Exponential volume drop-off: models logarithmic decibel perception (Weber-Fechner)
+ */
+export function calculateExponentialVolume(distance, minDistance = 60, maxDistance = 280, rolloffFactor = 2.5) {
+  if (distance <= minDistance) return 1.0;
+  if (distance >= maxDistance || minDistance >= maxDistance) return distance <= minDistance ? 1.0 : 0.0;
+  const factor = Math.max(0.1, rolloffFactor || 2.5);
+  const t = (distance - minDistance) / (maxDistance - minDistance);
+  const denom = 1 - Math.exp(-factor);
+  const val = (Math.exp(-factor * t) - Math.exp(-factor)) / denom;
+  return Math.max(0, Math.min(1, val));
+}
+
+/**
+ * Inverse distance volume drop-off: models physical 1/r wave expansion
+ */
+export function calculateInverseVolume(distance, minDistance = 60, maxDistance = 280, rolloffFactor = 1.0) {
+  if (distance <= minDistance) return 1.0;
+  if (distance >= maxDistance || minDistance >= maxDistance) return distance <= minDistance ? 1.0 : 0.0;
+  const factor = Math.max(0.1, rolloffFactor || 1.0);
+  const t = (distance - minDistance) / (maxDistance - minDistance);
+  const raw0 = 1;
+  const raw1 = 1 / (1 + factor);
+  const rawT = 1 / (1 + factor * t);
+  const val = (rawT - raw1) / (raw0 - raw1);
+  return Math.max(0, Math.min(1, val));
+}
+
+/**
+ * Smoothstep (Sigmoid S-curve) volume drop-off: 1 - (3t^2 - 2t^3)
+ */
+export function calculateSmoothstepVolume(distance, minDistance = 60, maxDistance = 280) {
+  if (distance <= minDistance) return 1.0;
+  if (distance >= maxDistance || minDistance >= maxDistance) return distance <= minDistance ? 1.0 : 0.0;
+  const t = (distance - minDistance) / (maxDistance - minDistance);
+  const val = 1 - (3 * t * t - 2 * t * t * t);
+  return Math.max(0, Math.min(1, val));
+}
+
+/**
+ * Master spatial volume calculation dispatcher supporting both positional and options arguments
+ */
+export function calculateSpatialVolume(distance, minOrOptions = 60, maxDistance = 280, model = 'linear', rolloffFactor = 1.0) {
+  let min = minOrOptions;
+  let max = maxDistance;
+  let mod = model;
+  let roll = rolloffFactor;
+
+  if (typeof minOrOptions === 'object' && minOrOptions !== null) {
+    min = minOrOptions.minDistance ?? 60;
+    max = minOrOptions.maxDistance ?? 280;
+    mod = minOrOptions.attenuationModel || minOrOptions.model || 'linear';
+    roll = minOrOptions.rolloffFactor ?? 1.0;
+  }
+
+  switch (mod) {
+    case 'exponential':
+      return calculateExponentialVolume(distance, min, max, roll === 1.0 ? 2.5 : roll);
+    case 'inverse':
+      return calculateInverseVolume(distance, min, max, roll);
+    case 'smoothstep':
+      return calculateSmoothstepVolume(distance, min, max);
+    case 'linear':
+    default:
+      return calculateLinearVolume(distance, min, max);
+  }
+}
+
+/**
+ * Low-pass air damping cutoff frequency: higher frequencies attenuate faster over distance
+ */
+export function calculateAirDampingCutoff(distance, minDistance = 60, maxDistance = 280, minFreq = 1000, maxFreq = 20000) {
+  if (distance <= minDistance) return maxFreq;
+  if (distance >= maxDistance || minDistance >= maxDistance) return minFreq;
+  const t = (distance - minDistance) / (maxDistance - minDistance);
+  const logMin = Math.log(minFreq);
+  const logMax = Math.log(maxFreq);
+  const cutoff = Math.exp(logMax - t * (logMax - logMin));
+  return Math.max(minFreq, Math.min(maxFreq, Math.round(cutoff)));
+}
+
+/**
+ * Line segment intersection helper for obstacle obstruction testing
+ */
+function lineSegmentsIntersect(p1, p2, p3, p4) {
+  const ccw = (A, B, C) => (C.y - A.y) * (B.x - A.x) > (B.y - A.y) * (C.x - A.x);
+  return ccw(p1, p3, p4) !== ccw(p2, p3, p4) && ccw(p1, p2, p3) !== ccw(p1, p2, p4);
+}
+
+/**
+ * Checks if line-of-sight between two avatars is obstructed by any obstacle/partition
+ */
+export function calculateObstacleOcclusion(pos1, pos2, obstacles = [], occlusionFactor = 0.5) {
+  if (!pos1 || !pos2 || !Array.isArray(obstacles) || obstacles.length === 0) {
+    return 1.0;
+  }
+
+  for (const obs of obstacles) {
+    if (!obs || typeof obs.x !== 'number' || typeof obs.y !== 'number') continue;
+    const { x, y, width = 0, height = 0 } = obs;
+    if (width <= 0 || height <= 0) continue;
+
+    const topLeft = { x, y };
+    const topRight = { x: x + width, y };
+    const bottomLeft = { x, y: y + height };
+    const bottomRight = { x: x + width, y: y + height };
+
+    if (
+      lineSegmentsIntersect(pos1, pos2, topLeft, topRight) ||
+      lineSegmentsIntersect(pos1, pos2, topRight, bottomRight) ||
+      lineSegmentsIntersect(pos1, pos2, bottomRight, bottomLeft) ||
+      lineSegmentsIntersect(pos1, pos2, bottomLeft, topLeft)
+    ) {
+      return occlusionFactor;
+    }
+  }
+
+  return 1.0;
 }
 
 export function calculateSpatialPan(dx, maxDistance = 280) {
@@ -215,11 +343,16 @@ export class WebRTCManager {
       remoteStream: null,
       audioElement: null,
       sourceNode: null,
+      filterNode: null,
       gainNode: null,
       pannerNode: null,
       analyserNode: null,
       iceQueue: [],
       isSpeaking: false,
+      currentVolume: 1.0,
+      currentDistance: 0,
+      currentPan: 0,
+      isOccluded: false,
     };
 
     // Add local tracks to peer connection
@@ -372,7 +505,15 @@ export class WebRTCManager {
   }
 
   /**
-   * Setup remote audio playback and Web Audio spatial routing
+   * Updates dynamic spatial audio configuration parameters at runtime
+   */
+  updateSpatialConfig(config = {}) {
+    this.spatialConfig = { ...this.spatialConfig, ...config };
+  }
+
+  /**
+   * Setup remote audio playback and Web Audio spatial routing:
+   * MediaStream -> MediaStreamAudioSourceNode -> [BiquadFilterNode] -> GainNode -> [StereoPannerNode] -> AnalyserNode -> Destination
    */
   setupRemoteAudio(peerId, stream) {
     const peer = this.peers.get(peerId);
@@ -390,6 +531,8 @@ export class WebRTCManager {
       }
       if (audio) {
         audio.srcObject = stream;
+        // Keep audio element muted when routed via Web Audio to avoid echoing/double playback
+        audio.muted = true;
         try {
           const playPromise = audio.play();
           if (playPromise && typeof playPromise.catch === 'function') {
@@ -408,20 +551,37 @@ export class WebRTCManager {
         const analyserNode = ctx.createAnalyser();
         analyserNode.fftSize = 256;
 
+        let filterNode = null;
+        if (typeof ctx.createBiquadFilter === 'function' && this.spatialConfig.airDamping !== false) {
+          filterNode = ctx.createBiquadFilter();
+          filterNode.type = 'lowpass';
+          filterNode.frequency.setValueAtTime(20000, ctx.currentTime);
+        }
+
         let pannerNode = null;
         if (typeof ctx.createStereoPanner === 'function' && this.spatialConfig.panEnabled) {
           pannerNode = ctx.createStereoPanner();
-          sourceNode.connect(gainNode);
-          gainNode.connect(pannerNode);
-          pannerNode.connect(analyserNode);
-          analyserNode.connect(ctx.destination);
-        } else {
-          sourceNode.connect(gainNode);
-          gainNode.connect(analyserNode);
-          analyserNode.connect(ctx.destination);
         }
 
+        // Connect audio graph
+        let currentNode = sourceNode;
+        if (filterNode) {
+          currentNode.connect(filterNode);
+          currentNode = filterNode;
+        }
+        currentNode.connect(gainNode);
+        currentNode = gainNode;
+
+        if (pannerNode) {
+          currentNode.connect(pannerNode);
+          currentNode = pannerNode;
+        }
+
+        currentNode.connect(analyserNode);
+        analyserNode.connect(ctx.destination);
+
         peer.sourceNode = sourceNode;
+        peer.filterNode = filterNode;
         peer.gainNode = gainNode;
         peer.pannerNode = pannerNode;
         peer.analyserNode = analyserNode;
@@ -453,15 +613,26 @@ export class WebRTCManager {
   }
 
   /**
-   * Update spatial audio attenuation for all active peers based on 2D office positions
+   * Update spatial audio attenuation for all active peers based on 2D office positions,
+   * distance attenuation models, stereo panning, acoustic air absorption, and obstacle occlusion.
    */
-  updateSpatialAudio(localPos, participantsList = []) {
+  updateSpatialAudio(localPos, participantsList = [], obstacles = []) {
     if (!localPos || !Number.isFinite(localPos.x) || !Number.isFinite(localPos.y)) {
       return;
     }
 
-    const { minDistance, maxDistance, panEnabled } = this.spatialConfig;
+    const {
+      minDistance = 60,
+      maxDistance = 280,
+      panEnabled = true,
+      attenuationModel = 'linear',
+      rolloffFactor = 1.0,
+      airDamping = true,
+      occlusionEnabled = true,
+    } = this.spatialConfig;
+
     const ctx = this.audioContext;
+    const now = ctx?.currentTime || 0;
 
     for (const [peerId, peer] of this.peers.entries()) {
       const participant = participantsList.find((p) => p.id === peerId);
@@ -471,16 +642,67 @@ export class WebRTCManager {
       const dy = participant.y - localPos.y;
       const distance = Math.hypot(dx, dy);
 
-      const volume = calculateSpatialVolume(distance, minDistance, maxDistance);
+      // 1. Calculate base dynamic volume drop-off
+      let volume = calculateSpatialVolume(distance, {
+        minDistance,
+        maxDistance,
+        attenuationModel,
+        rolloffFactor,
+      });
+
+      // 2. Obstacle Occlusion / Wall Muffling
+      let occlusion = 1.0;
+      if (occlusionEnabled && Array.isArray(obstacles) && obstacles.length > 0) {
+        occlusion = calculateObstacleOcclusion(localPos, participant, obstacles);
+        volume *= occlusion;
+      }
+
+      // 3. Stereo Directional Panning
       const pan = calculateSpatialPan(dx, maxDistance);
 
+      // 4. Acoustic Air Damping / Lowpass Filter Cutoff
+      let cutoff = 20000;
+      if (airDamping) {
+        cutoff = calculateAirDampingCutoff(distance, minDistance, maxDistance);
+        if (occlusion < 1.0) {
+          // Additional high-frequency barrier diffraction absorption
+          cutoff = Math.min(cutoff, 850);
+        }
+      }
+
+      peer.currentVolume = volume;
+      peer.currentDistance = distance;
+      peer.currentPan = pan;
+      peer.isOccluded = occlusion < 1.0;
+
+      // Update Web Audio nodes
       if (peer.gainNode && ctx) {
-        peer.gainNode.gain.setValueAtTime(volume, ctx.currentTime);
+        if (typeof peer.gainNode.gain.setValueAtTime === 'function') {
+          peer.gainNode.gain.setValueAtTime(volume, now);
+        } else if (typeof peer.gainNode.gain.setTargetAtTime === 'function') {
+          peer.gainNode.gain.setTargetAtTime(volume, now, 0.04);
+        }
       }
+
+      if (peer.filterNode && ctx) {
+        if (typeof peer.filterNode.frequency.setValueAtTime === 'function') {
+          peer.filterNode.frequency.setValueAtTime(cutoff, now);
+        } else if (typeof peer.filterNode.frequency.setTargetAtTime === 'function') {
+          peer.filterNode.frequency.setTargetAtTime(cutoff, now, 0.04);
+        }
+      }
+
       if (peer.pannerNode && ctx && panEnabled) {
-        peer.pannerNode.pan.setValueAtTime(pan, ctx.currentTime);
+        if (typeof peer.pannerNode.pan.setValueAtTime === 'function') {
+          peer.pannerNode.pan.setValueAtTime(pan, now);
+        } else if (typeof peer.pannerNode.pan.setTargetAtTime === 'function') {
+          peer.pannerNode.pan.setTargetAtTime(pan, now, 0.04);
+        }
       }
-      if (peer.audioElement) {
+
+      // Fallback for environments where Web Audio is absent or failed
+      if (peer.audioElement && (!ctx || !peer.gainNode)) {
+        peer.audioElement.muted = false;
         peer.audioElement.volume = volume;
       }
     }
@@ -499,6 +721,7 @@ export class WebRTCManager {
 
     try {
       if (peer.sourceNode) peer.sourceNode.disconnect();
+      if (peer.filterNode) peer.filterNode.disconnect();
       if (peer.gainNode) peer.gainNode.disconnect();
       if (peer.pannerNode) peer.pannerNode.disconnect();
       if (peer.analyserNode) peer.analyserNode.disconnect();

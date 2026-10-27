@@ -108,32 +108,54 @@ MediaStream ──► MediaStreamAudioSourceNode ──► AnalyserNode (fftSize
 
 ---
 
-## 🌐 4. 2D Spatial Audio Attenuation & Stereo Panning
+## 🌐 4. Dynamic Attenuation Algorithms & 2D Spatial Audio
 
-ProxiSpeak simulates realistic proximity audio falloff on the virtual office floor (1440 × 894 px canvas).
+ProxiSpeak simulates realistic proximity audio falloff on the virtual office floor (1440 × 894 px canvas) by hooking WebRTC peer audio streams directly into the Web Audio API.
 
-### Falloff Parameters:
-- **Min Distance (`minDistance`)**: 60px (full volume, $1.0$).
-- **Max Distance (`maxDistance`)**: 280px (silent beyond this threshold, $0.0$).
-- **Smooth Linear Falloff Curve**:
-  $$\text{Volume}(d) = \begin{cases} 1.0 & \text{if } d \le 60 \\ 0.0 & \text{if } d \ge 280 \\ 1.0 - \frac{d - 60}{280 - 60} & \text{otherwise} \end{cases}$$
+### 4.1 Volume Drop-Off Algorithms Based on Pixel Distance
 
-### Stereo Panning ($[-1, 1]$):
-$$\text{Pan}(\Delta x) = \max\left(-1, \min\left(1, \frac{\Delta x}{280}\right)\right)$$
-Where $\Delta x = x_{\text{peer}} - x_{\text{local}}$. A teammate to the user's left sounds in the left headphone channel, while one to the right sounds in the right channel.
+Multiple configurable attenuation curves are supported to match physical acoustic propagation or perceptual preferences:
 
-### Web Audio Routing Graph:
+1. **Linear Drop-Off (`calculateLinearVolume`)**:
+   $$\text{Volume}(d) = \begin{cases} 1.0 & \text{if } d \le d_{\min} \\ 0.0 & \text{if } d \ge d_{\max} \\ 1.0 - \frac{d - d_{\min}}{d_{\max} - d_{\min}} & \text{otherwise} \end{cases}$$
+
+2. **Exponential / Logarithmic Drop-Off (`calculateExponentialVolume`)**:
+   Models human auditory perception (Weber-Fechner logarithmic hearing response and decibel sensation):
+   $$t = \frac{d - d_{\min}}{d_{\max} - d_{\min}}, \quad \text{Volume}(t) = \frac{e^{-\alpha \cdot t} - e^{-\alpha}}{1 - e^{-\alpha}}$$
+
+3. **Inverse Distance Drop-Off (`calculateInverseVolume`)**:
+   Models 3D spherical acoustic wave energy dispersion ($1/r$ sound pressure falloff):
+   $$t = \frac{d - d_{\min}}{d_{\max} - d_{\min}}, \quad \text{Volume}(t) = \frac{\frac{1}{1 + \gamma \cdot t} - \frac{1}{1 + \gamma}}{1 - \frac{1}{1 + \gamma}}$$
+
+4. **Smoothstep S-Curve (`calculateSmoothstepVolume`)**:
+   Cubic Hermite polynomial with zero first derivative at both boundary limits ($d_{\min}$ and $d_{\max}$), preventing sudden jumps in volume slope:
+   $$t = \frac{d - d_{\min}}{d_{\max} - d_{\min}}, \quad \text{Volume}(t) = 1 - (3t^2 - 2t^3)$$
+
+5. **Acoustic Air Damping (`calculateAirDampingCutoff`)**:
+   High frequencies attenuate faster through air over distance. A low-pass filter cutoff scales logarithmically from 20,000 Hz ($d \le d_{\min}$) down to 1,000 Hz ($d \ge d_{\max}$).
+
+6. **Obstacle & Wall Occlusion (`calculateObstacleOcclusion`)**:
+   Raycasting checks whether direct line-of-sight between two avatars is obstructed by cubicle partition obstacles, applying acoustic dampening and barrier low-pass filtration.
+
+### 4.2 Stereo Panning ($[-1, 1]$):
+$$\text{Pan}(\Delta x) = \max\left(-1, \min\left(1, \frac{\Delta x}{d_{\max}}\right)\right)$$
+Where $\Delta x = x_{\text{peer}} - x_{\text{local}}$. A teammate to the user's left sounds in the left channel, while one to the right sounds in the right channel.
+
+### 4.3 Web Audio Routing Graph:
 ```
 Remote MediaStream ──► MediaStreamAudioSourceNode
                              │
                              ▼
-                         GainNode (Dynamic Distance Volume)
+                     BiquadFilterNode (Lowpass Air Damping & Occlusion)
+                             │
+                             ▼
+                         GainNode (Dynamic Distance Volume Drop-off)
                              │
                              ▼
                      StereoPannerNode (Left/Right Directional Pan)
                              │
                              ▼
-                         AnalyserNode (Remote VAD Indicator)
+                         AnalyserNode (Remote VAD & Metering)
                              │
                              ▼
                      audioContext.destination (Speakers / Headphones)
@@ -145,11 +167,11 @@ Remote MediaStream ──► MediaStreamAudioSourceNode
 
 | Component | Responsibility |
 |---|---|
-| [`WebRTCManager`](file:///c:/Users/MITESH%20SAWANT/Downloads/PROXISPEAK/client/src/services/webrtcManager.js) | Native WebRTC and Web Audio orchestration class. |
-| [`useWebRTC`](file:///c:/Users/MITESH%20SAWANT/Downloads/PROXISPEAK/client/src/hooks/useWebRTC.js) | Custom React hook binding WebRTC state to React rendering lifecycle. |
+| [`WebRTCManager`](file:///c:/Users/MITESH%20SAWANT/Downloads/PROXISPEAK/client/src/services/webrtcManager.js) | Native WebRTC and Web Audio orchestration class with dynamic attenuation algorithms and click-free audio ramping. |
+| [`useWebRTC`](file:///c:/Users/MITESH%20SAWANT/Downloads/PROXISPEAK/client/src/hooks/useWebRTC.js) | Custom React hook binding WebRTC state to React lifecycle, obstacle occlusion detection, and proximity gating. |
 | [`BottomToolbar`](file:///c:/Users/MITESH%20SAWANT/Downloads/PROXISPEAK/client/src/components/BottomToolbar.jsx) | Microphone toggle, real-time audio activity meter, mute states, and permission alerts. |
-| [`SettingsModal`](file:///c:/Users/MITESH%20SAWANT/Downloads/PROXISPEAK/client/src/components/OfficeModals.jsx) | Input microphone device selector, live input test level bar, and proximity falloff distance slider (100px - 400px). |
-| [`OfficeCanvas`](file:///c:/Users/MITESH%20SAWANT/Downloads/PROXISPEAK/client/src/office/OfficeCanvas.jsx) | 2D canvas drawing avatars with orange voice activity halos and muted badges. |
+| [`SettingsModal`](file:///c:/Users/MITESH%20SAWANT/Downloads/PROXISPEAK/client/src/components/OfficeModals.jsx) | Dynamic Attenuation Engine: algorithm selector (Linear, Exponential, Inverse, Smoothstep), core radius pills ($d_{\min}$), falloff slider ($d_{\max}$), interactive SVG curve visualizer, and acoustic filters. |
+| [`OfficeCanvas`](file:///c:/Users/MITESH%20SAWANT/Downloads/PROXISPEAK/client/src/office/OfficeCanvas.jsx) & [`OfficeRenderer`](file:///c:/Users/MITESH%20SAWANT/Downloads/PROXISPEAK/client/src/office/OfficeRenderer.js) | 2D canvas drawing avatars with dynamic attenuation halos (emerald 100% core ring + dashed blue outer falloff perimeter) and live volume percentage pills (`% vol • px dist`). |
 
 ---
 

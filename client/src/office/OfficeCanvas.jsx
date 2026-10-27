@@ -13,6 +13,7 @@ export default function OfficeCanvas({
   panY = 0,
   onPanChange,
   recenterTrigger = 0,
+  spatialConfig = null,
 }) {
   const canvasRef = useRef(null);
   const frameRef = useRef(null);
@@ -28,8 +29,8 @@ export default function OfficeCanvas({
   const hasMovedDragRef = useRef(false);
   const nearbyUsersRef = useRef(new Set());
 
-  const latestPropsRef = useRef({ localUser, participants, onLocalMove, zoom });
-  latestPropsRef.current = { localUser, participants, onLocalMove, zoom };
+  const latestPropsRef = useRef({ localUser, participants, onLocalMove, zoom, spatialConfig });
+  latestPropsRef.current = { localUser, participants, onLocalMove, zoom, spatialConfig };
 
   // Recenter on local user if requested
   useEffect(() => {
@@ -198,6 +199,7 @@ export default function OfficeCanvas({
           currentParticipants || [],
           deltaSeconds,
           movementRef.current?.target,
+          latestPropsRef.current.spatialConfig,
         );
       }
 
