@@ -66,13 +66,38 @@ export class OfficeRenderer {
 
     const minR = (spatialConfig?.minDistance ?? 60) * this.scale;
     const maxR = (spatialConfig?.maxDistance ?? 280) * this.scale;
+    const midR = (minR + maxR) / 2;
 
     ctx.save();
 
-    // 1. Outer dynamic attenuation falloff field (soft radial glow)
+    // 1. Animated speaking wave ripples when avatar is actively talking
+    if (localUser.isSpeaking) {
+      const now = (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
+      const ripplePhase = (now * 1.4) % 1;
+      const rippleR = minR + (maxR - minR) * ripplePhase;
+      const rippleAlpha = Math.max(0, 0.45 * (1 - ripplePhase));
+
+      ctx.beginPath();
+      ctx.arc(sx, sy, rippleR, 0, Math.PI * 2);
+      ctx.lineWidth = 2.2 * this.scale;
+      ctx.strokeStyle = `rgba(249, 115, 22, ${rippleAlpha})`;
+      ctx.stroke();
+
+      const ripple2Phase = ((now * 1.4) + 0.5) % 1;
+      const ripple2R = minR + (maxR - minR) * ripple2Phase;
+      const ripple2Alpha = Math.max(0, 0.35 * (1 - ripple2Phase));
+
+      ctx.beginPath();
+      ctx.arc(sx, sy, ripple2R, 0, Math.PI * 2);
+      ctx.lineWidth = 1.6 * this.scale;
+      ctx.strokeStyle = `rgba(59, 130, 246, ${ripple2Alpha})`;
+      ctx.stroke();
+    }
+
+    // 2. Outer dynamic attenuation falloff field (soft radial glow)
     const gradient = ctx.createRadialGradient(sx, sy, minR, sx, sy, maxR);
-    gradient.addColorStop(0, 'rgba(37, 99, 235, 0.09)');
-    gradient.addColorStop(0.65, 'rgba(37, 99, 235, 0.03)');
+    gradient.addColorStop(0, 'rgba(37, 99, 235, 0.10)');
+    gradient.addColorStop(0.5, 'rgba(37, 99, 235, 0.04)');
     gradient.addColorStop(1, 'rgba(37, 99, 235, 0.00)');
 
     ctx.beginPath();
@@ -80,20 +105,28 @@ export class OfficeRenderer {
     ctx.fillStyle = gradient;
     ctx.fill();
 
-    // 2. Outer sound perimeter (dashed circle)
+    // 3. Mid-distance guide ring (50% distance guide)
+    ctx.beginPath();
+    ctx.setLineDash([2 * this.scale, 4 * this.scale]);
+    ctx.arc(sx, sy, midR, 0, Math.PI * 2);
+    ctx.lineWidth = 1 * this.scale;
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
+    ctx.stroke();
+
+    // 4. Outer sound perimeter (dashed circle)
     ctx.beginPath();
     ctx.arc(sx, sy, maxR, 0, Math.PI * 2);
     ctx.setLineDash([4 * this.scale, 5 * this.scale]);
-    ctx.lineWidth = 1.3 * this.scale;
-    ctx.strokeStyle = 'rgba(37, 99, 235, 0.4)';
+    ctx.lineWidth = 1.4 * this.scale;
+    ctx.strokeStyle = 'rgba(37, 99, 235, 0.45)';
     ctx.stroke();
 
-    // 3. Inner 100% volume threshold (subtle solid emerald ring)
+    // 5. Inner 100% volume threshold (emerald ring with subtle inner glow)
     ctx.beginPath();
     ctx.setLineDash([]);
     ctx.arc(sx, sy, minR, 0, Math.PI * 2);
-    ctx.lineWidth = 1.5 * this.scale;
-    ctx.strokeStyle = 'rgba(16, 185, 129, 0.5)';
+    ctx.lineWidth = 1.8 * this.scale;
+    ctx.strokeStyle = 'rgba(16, 185, 129, 0.6)';
     ctx.stroke();
 
     ctx.restore();
@@ -118,7 +151,7 @@ export class OfficeRenderer {
     ctx.beginPath();
     ctx.moveTo(x1, y1);
     ctx.lineTo(x2, y2);
-    ctx.lineWidth = Math.max(1.5, (1.2 + volume * 1.5) * this.scale);
+    ctx.lineWidth = Math.max(1.8, (1.2 + volume * 1.8) * this.scale);
     ctx.strokeStyle = `rgba(24, 24, 27, ${0.35 + volume * 0.65})`;
     ctx.stroke();
 
@@ -153,25 +186,37 @@ export class OfficeRenderer {
     ctx.arc(midX + 4 * s, midY + 4 * s, 3.5 * s, Math.PI, 0, false);
     ctx.fill();
 
-    // 4. Volume Attenuation Pill Indicator above midpoint
+    // 4. Enhanced Volume Attenuation Pill Indicator above midpoint
     if (dist > 0) {
       const labelText = `${volPercent}% • ${Math.round(dist)}px`;
       ctx.font = `700 ${Math.max(9, 10 * this.scale)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
       const textWidth = ctx.measureText(labelText).width;
-      const pillW = textWidth + 12 * this.scale;
-      const pillH = 16 * this.scale;
-      const pillY = midY - badgeR - 10 * this.scale;
+      const iconSpace = 10 * this.scale;
+      const pillW = textWidth + iconSpace + 14 * this.scale;
+      const pillH = 18 * this.scale;
+      const pillY = midY - badgeR - 11 * this.scale;
+      const pillX = midX - pillW / 2;
 
       ctx.beginPath();
       const r = pillH / 2;
-      ctx.roundRect(midX - pillW / 2, pillY - pillH / 2, pillW, pillH, r);
-      ctx.fillStyle = volume > 0.6 ? '#10b981' : volume > 0.2 ? '#2563eb' : '#64748b';
+      ctx.roundRect(pillX, pillY - pillH / 2, pillW, pillH, r);
+      ctx.fillStyle = volume > 0.65 ? '#10b981' : volume > 0.25 ? '#2563eb' : '#64748b';
       ctx.fill();
 
+      // Mini sound equalizer bars inside pill
+      const barX = pillX + 6 * this.scale;
+      const barY = pillY;
       ctx.fillStyle = '#ffffff';
-      ctx.textAlign = 'center';
+      const h1 = (volume > 0.3 ? 8 : 4) * this.scale;
+      const h2 = (volume > 0.6 ? 11 : 6) * this.scale;
+      const h3 = (volume > 0.15 ? 7 : 3) * this.scale;
+      ctx.fillRect(barX, barY - h1 / 2, 1.5 * this.scale, h1);
+      ctx.fillRect(barX + 2.5 * this.scale, barY - h2 / 2, 1.5 * this.scale, h2);
+      ctx.fillRect(barX + 5 * this.scale, barY - h3 / 2, 1.5 * this.scale, h3);
+
+      ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
-      ctx.fillText(labelText, midX, pillY);
+      ctx.fillText(labelText, barX + 9 * this.scale, pillY);
     }
 
     ctx.restore();

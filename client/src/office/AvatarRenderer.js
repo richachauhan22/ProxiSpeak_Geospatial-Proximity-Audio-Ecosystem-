@@ -75,7 +75,7 @@ export class AvatarRenderer {
     }
     ctx.restore();
 
-    // 5. Orange Audio Speaking Arc (Voice Activity)
+    // 5. Orange Audio Speaking Arc & Pulse (Voice Activity)
     if (user.isSpeaking) {
       ctx.save();
       ctx.beginPath();
@@ -92,6 +92,13 @@ export class AvatarRenderer {
       ctx.lineWidth = 3.8 * scale;
       ctx.lineCap = 'round';
       ctx.strokeStyle = '#f97316'; // Vibrant orange as in screenshot
+      ctx.stroke();
+
+      // Secondary subtle voice reverberation echo arc
+      ctx.beginPath();
+      ctx.arc(x, y, arcRadius + 4 * scale, startAngle + 0.05, endAngle - 0.05);
+      ctx.lineWidth = 1.8 * scale;
+      ctx.strokeStyle = 'rgba(249, 115, 22, 0.45)';
       ctx.stroke();
       ctx.restore();
     }

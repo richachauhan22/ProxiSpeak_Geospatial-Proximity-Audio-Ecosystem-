@@ -1,15 +1,20 @@
 import React, { useState } from 'react';
 import { sounds } from '../services/soundEffects';
-import { calculateSpatialVolume } from '../services/webrtcManager';
+import {
+  calculateSpatialVolume,
+  calculateAirDampingCutoff,
+} from '../services/webrtcManager';
 
 function AttenuationCurveGraph({ minDistance = 60, maxDistance = 280, model = 'linear', rolloffFactor = 1.0 }) {
+  const [hoverDist, setHoverDist] = useState(null);
   const width = 340;
-  const height = 110;
-  const padding = { top: 14, right: 14, bottom: 22, left: 36 };
+  const height = 115;
+  const padding = { top: 16, right: 14, bottom: 22, left: 36 };
   const graphW = width - padding.left - padding.right;
   const graphH = height - padding.top - padding.bottom;
 
   const points = [];
+  const linearPoints = [];
   const steps = 40;
   for (let i = 0; i <= steps; i++) {
     const d = (i / steps) * maxDistance;
@@ -17,34 +22,67 @@ function AttenuationCurveGraph({ minDistance = 60, maxDistance = 280, model = 'l
     const x = padding.left + (d / maxDistance) * graphW;
     const y = padding.top + (1 - vol) * graphH;
     points.push({ x, y, d, vol });
+
+    if (model !== 'linear') {
+      const linVol = calculateSpatialVolume(d, { minDistance, maxDistance, attenuationModel: 'linear' });
+      linearPoints.push({ x, y: padding.top + (1 - linVol) * graphH });
+    }
   }
 
   const pathD = points.reduce((acc, pt, idx) => `${acc} ${idx === 0 ? 'M' : 'L'} ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`, '');
   const areaD = `${pathD} L ${(padding.left + graphW).toFixed(1)} ${(padding.top + graphH).toFixed(1)} L ${padding.left.toFixed(1)} ${(padding.top + graphH).toFixed(1)} Z`;
+  const linearPathD = linearPoints.length > 0
+    ? linearPoints.reduce((acc, pt, idx) => `${acc} ${idx === 0 ? 'M' : 'L'} ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`, '')
+    : null;
 
-  const probeDist = Math.round(minDistance + (maxDistance - minDistance) * 0.42);
-  const probeVol = calculateSpatialVolume(probeDist, { minDistance, maxDistance, attenuationModel: model, rolloffFactor });
-  const probeX = padding.left + (probeDist / maxDistance) * graphW;
-  const probeY = padding.top + (1 - probeVol) * graphH;
+  const activeDist = hoverDist !== null ? hoverDist : Math.round(minDistance + (maxDistance - minDistance) * 0.42);
+  const activeVol = calculateSpatialVolume(activeDist, { minDistance, maxDistance, attenuationModel: model, rolloffFactor });
+  const probeX = padding.left + (Math.min(maxDistance, Math.max(0, activeDist)) / maxDistance) * graphW;
+  const probeY = padding.top + (1 - activeVol) * graphH;
+
+  const handleMouseMove = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clientX = e.clientX - rect.left;
+    const svgX = (clientX / rect.width) * width;
+    const clampedSvgX = Math.max(padding.left, Math.min(padding.left + graphW, svgX));
+    const dist = ((clampedSvgX - padding.left) / graphW) * maxDistance;
+    setHoverDist(Math.round(dist));
+  };
+
+  const handleMouseLeave = () => {
+    setHoverDist(null);
+  };
 
   return (
     <div className="attenuation-curve-card" style={{ background: '#f8fafc', borderRadius: '10px', padding: '10px', border: '1px solid #e2e8f0', marginTop: '12px', marginBottom: '8px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', fontSize: '11px', fontWeight: '700', color: '#475569' }}>
         <span>📈 DYNAMIC ATTENUATION CURVE</span>
-        <span style={{ color: '#2563eb' }}>{probeDist}px ➔ {Math.round(probeVol * 100)}% vol</span>
+        <span style={{ color: activeVol > 0.6 ? '#10b981' : activeVol > 0.2 ? '#2563eb' : '#64748b' }}>
+          {activeDist}px ➔ {Math.round(activeVol * 100)}% vol {hoverDist !== null ? '(interactive)' : ''}
+        </span>
       </div>
-      <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} style={{ overflow: 'visible' }}>
+      <svg
+        width="100%"
+        height={height}
+        viewBox={`0 0 ${width} ${height}`}
+        style={{ overflow: 'visible', cursor: 'crosshair', userSelect: 'none' }}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+      >
         <defs>
           <linearGradient id="curveGradient" x1="0%" y1="0%" x2="0%" y2="100%">
             <stop offset="0%" stopColor="#2563eb" stopOpacity="0.32" />
             <stop offset="100%" stopColor="#2563eb" stopOpacity="0.02" />
           </linearGradient>
         </defs>
+
+        {/* Grid lines */}
         <line x1={padding.left} y1={padding.top} x2={padding.left + graphW} y2={padding.top} stroke="#e2e8f0" strokeDasharray="3 3" />
         <line x1={padding.left} y1={padding.top + graphH / 2} x2={padding.left + graphW} y2={padding.top + graphH / 2} stroke="#e2e8f0" strokeDasharray="3 3" />
         <line x1={padding.left} y1={padding.top + graphH} x2={padding.left + graphW} y2={padding.top + graphH} stroke="#cbd5e1" strokeWidth="1.5" />
         <line x1={padding.left} y1={padding.top} x2={padding.left} y2={padding.top + graphH} stroke="#cbd5e1" strokeWidth="1.5" />
 
+        {/* Min distance marker */}
         {minDistance < maxDistance && (
           <line
             x1={padding.left + (minDistance / maxDistance) * graphW}
@@ -57,10 +95,33 @@ function AttenuationCurveGraph({ minDistance = 60, maxDistance = 280, model = 'l
           />
         )}
 
-        <path d={areaD} fill="url(#curveGradient)" />
-        <path d={pathD} fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-        <circle cx={probeX} cy={probeY} r="4" fill="#2563eb" stroke="#ffffff" strokeWidth="2" />
+        {/* Reference linear curve */}
+        {linearPathD && (
+          <path d={linearPathD} fill="none" stroke="#94a3b8" strokeDasharray="3 3" strokeWidth="1.4" opacity="0.6" />
+        )}
 
+        {/* Shaded Area */}
+        <path d={areaD} fill="url(#curveGradient)" />
+        {/* Stroke Path */}
+        <path d={pathD} fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+
+        {/* Hover vertical crosshair */}
+        {hoverDist !== null && (
+          <line
+            x1={probeX}
+            y1={padding.top}
+            x2={probeX}
+            y2={padding.top + graphH}
+            stroke="#3b82f6"
+            strokeWidth="1"
+            strokeDasharray="2 2"
+          />
+        )}
+
+        {/* Active probe point */}
+        <circle cx={probeX} cy={probeY} r={hoverDist !== null ? "5" : "4"} fill="#2563eb" stroke="#ffffff" strokeWidth="2" />
+
+        {/* Axis Labels */}
         <text x={padding.left - 4} y={padding.top + 4} fill="#64748b" fontSize="9" textAnchor="end">100%</text>
         <text x={padding.left - 4} y={padding.top + graphH / 2 + 3} fill="#64748b" fontSize="9" textAnchor="end">50%</text>
         <text x={padding.left - 4} y={padding.top + graphH + 3} fill="#64748b" fontSize="9" textAnchor="end">0%</text>
@@ -392,6 +453,41 @@ export function SettingsModal({
                 <option value="inverse">Inverse Distance (Physical 1/r Wave)</option>
                 <option value="smoothstep">Smoothstep S-Curve (Hermite Smooth)</option>
               </select>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', marginTop: '6px' }}>
+                {[
+                  { id: 'linear', label: 'Linear', tag: 'Uniform' },
+                  { id: 'exponential', label: 'Exponential', tag: 'Natural dB' },
+                  { id: 'inverse', label: 'Inverse 1/r', tag: 'Physics' },
+                  { id: 'smoothstep', label: 'Smoothstep', tag: 'S-Curve' },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      setAttenuationModel(item.id);
+                      emitConfigChange({ attenuationModel: item.id });
+                    }}
+                    style={{
+                      padding: '6px 4px',
+                      borderRadius: '8px',
+                      border: attenuationModel === item.id ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
+                      background: attenuationModel === item.id ? '#eff6ff' : '#ffffff',
+                      color: attenuationModel === item.id ? '#1d4ed8' : '#475569',
+                      textAlign: 'center',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <div style={{ fontSize: '11px', fontWeight: attenuationModel === item.id ? '700' : '600' }}>
+                      {item.label}
+                    </div>
+                    <div style={{ fontSize: '9px', opacity: 0.8, marginTop: '2px' }}>
+                      {item.tag}
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Full-volume core radius picker */}
@@ -462,6 +558,28 @@ export function SettingsModal({
               model={attenuationModel}
               rolloffFactor={rolloffFactor}
             />
+
+            {/* Live Acoustic Readout HUD */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginTop: '6px', padding: '8px 10px', background: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '11px' }}>
+              <div>
+                <span style={{ color: '#64748b', display: 'block', fontSize: '10px' }}>Simulated Vol</span>
+                <strong style={{ color: '#2563eb', fontSize: '12px' }}>
+                  {Math.round(calculateSpatialVolume(Math.round(minDistance + (localDistance - minDistance) * 0.42), { minDistance, maxDistance: localDistance, attenuationModel }) * 100)}%
+                </strong>
+              </div>
+              <div>
+                <span style={{ color: '#64748b', display: 'block', fontSize: '10px' }}>Air Damping</span>
+                <strong style={{ color: airDamping ? '#10b981' : '#94a3b8', fontSize: '12px' }}>
+                  {airDamping ? `${calculateAirDampingCutoff(Math.round(minDistance + (localDistance - minDistance) * 0.42), minDistance, localDistance)} Hz` : 'Disabled'}
+                </strong>
+              </div>
+              <div>
+                <span style={{ color: '#64748b', display: 'block', fontSize: '10px' }}>Wall Occlusion</span>
+                <strong style={{ color: occlusionEnabled ? '#f59e0b' : '#94a3b8', fontSize: '12px' }}>
+                  {occlusionEnabled ? '-50% (Muffled)' : 'Off'}
+                </strong>
+              </div>
+            </div>
           </div>
 
           <div className="settings-toggle-grid">

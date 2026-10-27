@@ -63,6 +63,45 @@ describe('SettingsModal WebRTC & Audio Configuration', () => {
 
     expect(handleRequestMic).toHaveBeenCalled();
   });
+
+  it('allows changing dynamic attenuation algorithm and notifies onSpatialConfigChange', () => {
+    const handleConfigChange = vi.fn();
+    render(
+      <SettingsModal
+        isOpen={true}
+        spatialConfig={{ attenuationModel: 'linear', minDistance: 60, maxDistance: 240 }}
+        onSpatialConfigChange={handleConfigChange}
+      />,
+    );
+
+    const modelSelect = screen.getByLabelText(/distance falloff algorithm/i);
+    expect(modelSelect).toBeInTheDocument();
+
+    fireEvent.change(modelSelect, { target: { value: 'exponential' } });
+    expect(handleConfigChange).toHaveBeenCalledWith(
+      expect.objectContaining({ attenuationModel: 'exponential' }),
+    );
+  });
+
+  it('allows selecting full-volume core radius pills and renders attenuation curve', () => {
+    const handleConfigChange = vi.fn();
+    render(
+      <SettingsModal
+        isOpen={true}
+        spatialConfig={{ minDistance: 60, maxDistance: 240 }}
+        onSpatialConfigChange={handleConfigChange}
+      />,
+    );
+
+    expect(screen.getByText(/dynamic attenuation curve/i)).toBeInTheDocument();
+
+    const pill90 = screen.getByRole('button', { name: /90 px/i });
+    fireEvent.click(pill90);
+
+    expect(handleConfigChange).toHaveBeenCalledWith(
+      expect.objectContaining({ minDistance: 90 }),
+    );
+  });
 });
 
 describe('Other Office Modals', () => {

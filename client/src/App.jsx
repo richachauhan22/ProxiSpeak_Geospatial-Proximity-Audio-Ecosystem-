@@ -462,6 +462,37 @@ function App() {
 
           {/* 2. Main Floor Workspace */}
           <main className="ovice-main-viewport modern-canvas-holder">
+            {/* Dynamic Attenuation Status HUD */}
+            <div
+              className="dynamic-attenuation-hud"
+              onClick={() => setSettingsOpen(true)}
+              title="Click to configure Dynamic Attenuation"
+              style={{
+                position: 'absolute',
+                top: '16px',
+                right: '18px',
+                zIndex: 20,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '6px 14px',
+                background: 'rgba(255, 255, 255, 0.88)',
+                backdropFilter: 'blur(12px)',
+                WebkitBackdropFilter: 'blur(12px)',
+                borderRadius: '999px',
+                border: '1px solid rgba(226, 232, 240, 0.8)',
+                boxShadow: '0 4px 16px rgba(15, 23, 42, 0.08)',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: '600',
+                color: '#1e293b',
+              }}
+            >
+              <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#10b981', boxShadow: '0 0 8px #10b981' }} />
+              <span>Spatial Audio: <strong>{spatialConfig.attenuationModel.toUpperCase()}</strong> ({spatialConfig.maxDistance}px)</span>
+              <span style={{ fontSize: '10px', color: '#64748b', background: '#f1f5f9', padding: '1px 6px', borderRadius: '4px' }}>⚙️</span>
+            </div>
+
             {/* Left Floating Floor Selector Widget (6F) */}
             <FloorSelector
               currentFloor={6}
