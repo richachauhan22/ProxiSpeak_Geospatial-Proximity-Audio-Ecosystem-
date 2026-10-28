@@ -18,6 +18,10 @@ import {
   QuickToolsModal,
   LeaveConfirmModal,
 } from './components/OfficeModals';
+import {
+  CollaborativeWhiteboardModal,
+  ScreenBroadcastModal,
+} from './components/InteractiveCanvasModals';
 import { DEFAULT_LOCAL_USER, DEFAULT_OFFICE_PARTICIPANTS, OFFICE_OBSTACLES } from './office/OfficeMap';
 import { sounds } from './services/soundEffects';
 
@@ -57,6 +61,10 @@ function App() {
   const [toolsOpen, setToolsOpen] = useState(false);
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
   const [miniMapOpen, setMiniMapOpen] = useState(false);
+  const [whiteboardOpen, setWhiteboardOpen] = useState(false);
+  const [broadcastOpen, setBroadcastOpen] = useState(false);
+  const [isBroadcasting, setIsBroadcasting] = useState(false);
+  const [lightingMode, setLightingMode] = useState('daylight'); // 'daylight' | 'sunset' | 'studio'
   const [proximityDistance, setProximityDistance] = useState(240);
   const [spatialConfig, setSpatialConfig] = useState({
     minDistance: 60,
@@ -397,6 +405,34 @@ function App() {
     }, 2400);
   };
 
+  const handleDeskSit = (desk, facingAngle) => {
+    const currentUser = localUserRef.current;
+    if (!currentUser) return;
+    const nextUser = {
+      ...currentUser,
+      x: desk.chair.x,
+      y: desk.chair.y,
+      facing: facingAngle,
+      status: 'Deep Work',
+      deskId: desk.id,
+    };
+    localUserRef.current = nextUser;
+    setLocalUser(nextUser);
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('office:move', { officeId, x: desk.chair.x, y: desk.chair.y });
+    }
+    showToast(`Seated at ${desk.label} · Facing Workstation`);
+  };
+
+  const handleSpatialPresetChange = (preset) => {
+    const model = preset === 'studio' ? 'smoothstep' : preset;
+    setSpatialConfig((prev) => ({
+      ...prev,
+      attenuationModel: model,
+    }));
+    showToast(`Spatial Sound Profile: ${preset.toUpperCase()}`);
+  };
+
   const currentLocalUser = {
     ...localUser,
     isMuted,
@@ -458,6 +494,10 @@ function App() {
             chatOpen={chatOpen}
             participantsOpen={participantsOpen}
             onCopyLink={() => showToast('Office link copied to clipboard!')}
+            lightingMode={lightingMode}
+            onLightingChange={setLightingMode}
+            onOpenWhiteboard={() => setWhiteboardOpen(true)}
+            onOpenBroadcast={() => setBroadcastOpen(true)}
           />
 
           {/* 2. Main Floor Workspace */}
@@ -493,9 +533,9 @@ function App() {
               <span style={{ fontSize: '10px', color: '#64748b', background: '#f1f5f9', padding: '1px 6px', borderRadius: '4px' }}>⚙️</span>
             </div>
 
-            {/* Left Floating Floor Selector Widget (6F) */}
+            {/* Left Floating Floor Selector Widget (4F) */}
             <FloorSelector
-              currentFloor={6}
+              currentFloor={4}
               onFloorChange={(fl) => showToast(`Elevator moved to Floor ${fl}F`)}
             />
 
@@ -510,6 +550,11 @@ function App() {
               onPanChange={(x, y) => setPanPosition({ x, y })}
               recenterTrigger={recenterCount}
               spatialConfig={spatialConfig}
+              lightingMode={lightingMode}
+              onOpenWhiteboard={() => setWhiteboardOpen(true)}
+              onOpenBroadcast={() => setBroadcastOpen(true)}
+              onDeskSit={handleDeskSit}
+              onToast={showToast}
             />
 
             {/* Floating Emojis */}
@@ -534,7 +579,7 @@ function App() {
               participants={activeParticipants}
               onTeleport={(x, y) => {
                 handleLocalMove({ x, y });
-                showToast('Navigated to map coordinate');
+                showToast('Navigated to zone coordinate');
               }}
             />
 
@@ -561,6 +606,29 @@ function App() {
               onLeaveOffice={() => setLeaveConfirmOpen(true)}
               onOpenHelp={() => setHelpOpen(true)}
               miniMapOpen={miniMapOpen}
+              spatialPreset={spatialConfig.attenuationModel}
+              onSpatialPresetChange={handleSpatialPresetChange}
+            />
+
+            {/* Interactive Whiteboard Modal */}
+            <CollaborativeWhiteboardModal
+              isOpen={whiteboardOpen}
+              onClose={() => setWhiteboardOpen(false)}
+              onSave={() => showToast('Whiteboard snapshot saved')}
+            />
+
+            {/* Screen Broadcast Modal */}
+            <ScreenBroadcastModal
+              isOpen={broadcastOpen}
+              onClose={() => setBroadcastOpen(false)}
+              isBroadcasting={isBroadcasting}
+              onToggleBroadcast={() => {
+                setIsBroadcasting((b) => {
+                  const next = !b;
+                  showToast(next ? 'Screen Broadcast Live on Stage' : 'Screen Broadcast Ended');
+                  return next;
+                });
+              }}
             />
 
             {/* Side Drawers */}

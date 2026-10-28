@@ -20,6 +20,8 @@ export default function BottomToolbar({
   onLeaveOffice,
   onOpenHelp,
   miniMapOpen = false,
+  spatialPreset = 'linear',
+  onSpatialPresetChange,
 }) {
   const [reactionsOpen, setReactionsOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -30,8 +32,9 @@ export default function BottomToolbar({
 
   const STATUS_LIST = [
     { label: 'Available', dot: 'available', emoji: '🟢' },
+    { label: 'Deep Work', dot: 'deepwork', emoji: '🧠' },
+    { label: 'In a Huddle', dot: 'huddle', emoji: '🎙️' },
     { label: 'In focus', dot: 'focus', emoji: '🟣' },
-    { label: 'Busy', dot: 'busy', emoji: '🔴' },
     { label: 'Coffee break', dot: 'coffee', emoji: '☕' },
     { label: 'Away', dot: 'away', emoji: '🟡' },
   ];
@@ -62,17 +65,23 @@ export default function BottomToolbar({
     setIsScreenSharing((prev) => !prev);
   };
 
-  const handleSoundboardChime = () => {
-    sounds.playProximityChime();
+  const handleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
   };
 
+  // Real-time decibel conversion from audioLevel [0..1]
+  const currentDb = isMuted ? -60 : Math.round(-48 + audioLevel * 48);
+
   return (
-    <div className="ovice-bottom-controls modern-bottom-dock" role="toolbar" aria-label="Office controls">
-      {/* ================= LEFT PILL: Profile & Communication ================= */}
-      <div className="toolbar-pill pill-communication glass-dock-pill">
-        {/* User Presence & Avatar */}
+    <div className="proxi-bottom-dock glassmorphic-dock" role="toolbar" aria-label="Office controls">
+      {/* ================= LEFT CAPSULE: Micro User Card & Status Picker ================= */}
+      <div className="dock-capsule capsule-profile">
         <div
-          className="pill-user-profile modern-profile-trigger"
+          className="micro-user-card"
           onClick={() => setProfileMenuOpen((prev) => !prev)}
           role="button"
           tabIndex={0}
@@ -99,18 +108,19 @@ export default function BottomToolbar({
             <span className="user-status-label">{userStatus}</span>
           </div>
 
-          {/* Mini audio activity indicator */}
-          {!isMuted && (
+          {/* Real-time decibel meter gauge & animated speaking waves */}
+          <div className="mic-db-gauge" title={isMuted ? 'Muted' : `Mic Input: ${currentDb} dB`}>
             <div className={`mini-voice-wave ${isSpeaking ? 'speaking' : ''}`} title={isSpeaking ? 'Speaking' : 'Listening'}>
               <span className="bar b1" style={isSpeaking ? { height: `${Math.max(6, Math.min(18, 6 + audioLevel * 20))}px` } : {}} />
               <span className="bar b2" style={isSpeaking ? { height: `${Math.max(10, Math.min(22, 10 + audioLevel * 24))}px` } : {}} />
               <span className="bar b3" style={isSpeaking ? { height: `${Math.max(6, Math.min(18, 6 + audioLevel * 20))}px` } : {}} />
             </div>
-          )}
+            <span className="db-readout">{isMuted ? 'Muted' : `${currentDb} dB`}</span>
+          </div>
         </div>
 
         {profileMenuOpen && (
-          <div className="profile-status-dropdown modern-status-menu" onClick={(e) => e.stopPropagation()}>
+          <div className="profile-status-dropdown glass-dropdown" onClick={(e) => e.stopPropagation()}>
             <div className="dropdown-header">Presence Status</div>
             {STATUS_LIST.map((st) => (
               <button
@@ -148,252 +158,220 @@ export default function BottomToolbar({
               }}
             >
               <span className="opt-icon">⌨️</span>
-              <span>Shortcuts & Movement Help</span>
+              <span>Shortcuts & Movement</span>
             </button>
-            {onLeaveOffice && (
-              <button
-                type="button"
-                className="status-opt opt-leave"
-                onClick={() => {
-                  setProfileMenuOpen(false);
-                  onLeaveOffice();
-                }}
-              >
-                <span className="opt-icon">🚪</span>
-                <span>Leave Office</span>
-              </button>
-            )}
           </div>
         )}
+      </div>
 
-        <span className="pill-divider" />
-
+      {/* ================= CENTER CAPSULE: Hardware Quick Toggles & Spatial Preset ================= */}
+      <div className="dock-capsule capsule-hardware">
         {/* Microphone Toggle Button */}
         <button
           type="button"
-          className={`pill-btn mic-btn ${isMuted ? 'muted' : 'active'} ${permissionStatus === 'denied' ? 'permission-denied' : ''} ${isSpeaking ? 'mic-speaking' : ''}`}
-          onClick={() => {
-            sounds.playClick();
-            if (onToggleMute) onToggleMute();
-          }}
-          aria-label={permissionStatus === 'denied' ? 'Microphone blocked (click to retry)' : isMuted ? 'Unmute microphone' : 'Mute microphone'}
-          title={permissionStatus === 'denied' ? 'Microphone blocked by browser (click to retry)' : isMuted ? 'Unmute microphone (Space)' : 'Mute microphone (Space)'}
+          className={`dock-btn mic-btn ${isMuted ? 'muted' : 'active'} ${permissionStatus === 'denied' ? 'permission-denied' : ''}`}
+          onClick={onToggleMute}
+          aria-label={
+            permissionStatus === 'denied'
+              ? 'Microphone blocked (Click to allow)'
+              : isMuted
+                ? 'Unmute microphone'
+                : 'Mute microphone'
+          }
+          title={
+            permissionStatus === 'denied'
+              ? 'Microphone blocked by browser. Click to retry permission.'
+              : isMuted
+                ? 'Unmute microphone (Space)'
+                : 'Mute microphone (Space)'
+          }
         >
           {permissionStatus === 'denied' ? (
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-400">
-              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-              <line x1="12" y1="9" x2="12" y2="13" />
-              <line x1="12" y1="17" x2="12.01" y2="17" />
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+              <path d="M12 9v4m0 4h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
             </svg>
           ) : isMuted ? (
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="1" y1="1" x2="23" y2="23" />
-              <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
-              <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23" />
-              <line x1="12" y1="19" x2="12" y2="23" />
-              <line x1="8" y1="23" x2="16" y2="23" />
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+              <line x1="2" y1="2" x2="22" y2="22" />
+              <path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2" />
+              <path d="M5 10v2a7 7 0 0 0 12 5" />
+              <path d="M15 9.34V5a3 3 0 0 0-5.68-1.33" />
+              <path d="M9 9v3a3 3 0 0 0 5.12 2.12" />
+              <line x1="12" y1="19" x2="12" y2="22" />
             </svg>
           ) : (
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
               <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-              <line x1="12" y1="19" x2="12" y2="23" />
-              <line x1="8" y1="23" x2="16" y2="23" />
+              <line x1="12" y1="19" x2="12" y2="22" />
             </svg>
           )}
+          <span className="btn-label">{isMuted ? 'Muted' : 'Mic'}</span>
         </button>
 
-        {/* Video Camera Toggle Button */}
+        {/* Camera Toggle Button */}
         <button
           type="button"
-          className={`pill-btn video-btn ${isVideoOn ? 'active camera-active' : 'off'}`}
-          onClick={() => {
-            sounds.playClick();
-            if (onToggleVideo) onToggleVideo();
-          }}
+          className={`dock-btn camera-btn ${isVideoOn ? 'active' : 'muted'}`}
+          onClick={onToggleVideo}
           aria-label={isVideoOn ? 'Turn camera off' : 'Turn camera on'}
-          title={isVideoOn ? 'Camera on' : 'Camera off'}
+          title={isVideoOn ? 'Turn camera off' : 'Turn camera on'}
         >
           {isVideoOn ? (
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="23 7 16 12 23 17 23 7" />
-              <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+              <path d="m22 8-6 4 6 4V8Z" />
+              <rect x="2" y="6" width="14" height="12" rx="2" />
             </svg>
           ) : (
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="1" y1="1" x2="23" y2="23" />
-              <path d="M21 15.5V7a2 2 0 0 0-2-2H7" />
-              <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+              <line x1="2" y1="2" x2="22" y2="22" />
+              <path d="m22 8-6 4 6 4V8Z" />
+              <path d="M2 10v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2" />
+              <path d="M7 6h7a2 2 0 0 1 2 2v2" />
             </svg>
           )}
+          <span className="btn-label">{isVideoOn ? 'Cam' : 'Off'}</span>
         </button>
 
-        {/* Screen Share Button */}
+        {/* Screen Share Toggle */}
         <button
           type="button"
-          className={`pill-btn screen-btn ${isScreenSharing ? 'active' : ''}`}
+          className={`dock-btn screen-btn ${isScreenSharing ? 'active-share' : ''}`}
           onClick={handleScreenShareToggle}
-          aria-label={isScreenSharing ? 'Stop presenting' : 'Share screen'}
-          title={isScreenSharing ? 'Stop sharing screen' : 'Share screen'}
+          aria-label="Share screen"
+          title="Share screen with nearby peers"
         >
-          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <rect x="2" y="3" width="20" height="14" rx="2" />
             <line x1="8" y1="21" x2="16" y2="21" />
             <line x1="12" y1="17" x2="12" y2="21" />
           </svg>
+          <span className="btn-label">{isScreenSharing ? 'Sharing' : 'Share'}</span>
         </button>
 
-        {/* Emoji Reactions Trigger */}
-        <div className="reaction-trigger-wrap">
+        {/* Spatial Sound Preset Pills (Linear / Exponential / Studio Room) */}
+        <div className="spatial-preset-selector" title="Spatial Sound Attenuation Algorithm">
+          <span className="preset-caption">Sound:</span>
+          {['linear', 'exponential', 'studio'].map((p) => (
+            <button
+              key={p}
+              type="button"
+              className={`preset-pill ${spatialPreset === p ? 'active' : ''}`}
+              onClick={() => {
+                if (onSpatialPresetChange) onSpatialPresetChange(p);
+                sounds.playClick();
+              }}
+            >
+              {p === 'linear' ? 'Linear' : p === 'exponential' ? 'Exp' : 'Studio'}
+            </button>
+          ))}
+        </div>
+
+        {/* Emoji Reaction Drawer Trigger */}
+        <div className="dock-reactions-wrap">
           <button
             type="button"
-            className={`pill-btn reaction-btn ${reactionsOpen ? 'active' : ''}`}
+            className="dock-btn reaction-btn"
             onClick={() => setReactionsOpen((prev) => !prev)}
             aria-label="Reactions"
-            title="Send emoji reaction"
+            title="Floating emoji reactions"
           >
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <path d="M8 14s1.5 2 4 2 4-2 4-2" />
-              <line x1="9" y1="9" x2="9.01" y2="9" />
-              <line x1="15" y1="9" x2="15.01" y2="9" />
-            </svg>
+            <span style={{ fontSize: '16px' }}>😊</span>
           </button>
 
           {reactionsOpen && (
-            <div className="reactions-float-picker modern-reactions-bar">
-              {emojis.map((emoji) => (
+            <div className="reaction-popover glass-dropdown">
+              {emojis.map((em) => (
                 <button
-                  key={emoji}
+                  key={em}
                   type="button"
-                  className="reaction-emoji-btn"
-                  onClick={() => handleEmojiClick(emoji)}
+                  className="reaction-em-btn"
+                  onClick={() => handleEmojiClick(em)}
+                  aria-label={em}
                 >
-                  {emoji}
+                  {em}
                 </button>
               ))}
             </div>
           )}
         </div>
-
-        {/* Soundboard Chime Trigger */}
-        <button
-          type="button"
-          className="pill-btn sound-chime-btn"
-          onClick={handleSoundboardChime}
-          aria-label="Sound chime"
-          title="Play chime bell"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-            <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-          </svg>
-        </button>
-
-        {/* Workspace Tools (+) Button */}
-        <button
-          type="button"
-          className="pill-btn add-btn"
-          onClick={onOpenAddMenu}
-          aria-label="Office tools"
-          title="Office tools"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-        </button>
       </div>
 
-      {/* ================= RIGHT PILL: Map & Zoom Controls ================= */}
-      <div className="toolbar-pill pill-map-zoom glass-dock-pill">
-        {/* Radar Mini-map toggle */}
+      {/* ================= RIGHT CAPSULE: Map Viewport Controls & Radar ================= */}
+      <div className="dock-capsule capsule-viewport">
+        {/* Mini-map Toggle */}
         <button
           type="button"
-          className={`pill-btn map-btn ${miniMapOpen ? 'active' : ''}`}
+          className={`dock-btn ${miniMapOpen ? 'active' : ''}`}
           onClick={onToggleMiniMap}
           aria-label="Mini-map radar"
           title="Toggle floor radar mini-map (M)"
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
-            <line x1="8" y1="2" x2="8" y2="18" />
-            <line x1="16" y1="6" x2="16" y2="22" />
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <circle cx="12" cy="12" r="9" />
+            <circle cx="12" cy="12" r="4" />
+            <line x1="12" y1="3" x2="12" y2="7" />
+            <line x1="12" y1="17" x2="12" y2="21" />
+            <line x1="3" y1="12" x2="7" y2="12" />
+            <line x1="17" y1="12" x2="21" y2="12" />
           </svg>
         </button>
 
-        {/* Recenter Target */}
+        {/* Snap to Me / Recenter */}
         <button
           type="button"
-          className="pill-btn target-btn"
-          onClick={() => {
-            sounds.playClick();
-            if (onRecenter) onRecenter();
-          }}
+          className="dock-btn"
+          onClick={onRecenter}
           aria-label="Recenter on your avatar"
-          title="Recenter view on your avatar"
+          title="Recenter camera on your avatar (R)"
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10" />
-            <line x1="12" y1="2" x2="12" y2="6" />
-            <line x1="12" y1="18" x2="12" y2="22" />
-            <line x1="2" y1="12" x2="6" y2="12" />
-            <line x1="18" y1="12" x2="22" y2="12" />
-            <circle cx="12" cy="12" r="3" fill="currentColor" />
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M3 12h4m10 0h4M12 3v4m0 10v4" />
           </svg>
         </button>
 
-        <span className="pill-divider" />
+        {/* Smooth Zoom Controls */}
+        <div className="zoom-controller-group">
+          <button
+            type="button"
+            className="zoom-btn"
+            onClick={handleZoomOut}
+            aria-label="Zoom out"
+            title="Zoom out"
+          >
+            −
+          </button>
+          <button
+            type="button"
+            className="zoom-reset-btn"
+            onClick={handleZoomReset}
+            aria-label="Reset zoom to 100%"
+            title="Reset to 100%"
+          >
+            {zoomLevel}%
+          </button>
+          <button
+            type="button"
+            className="zoom-btn"
+            onClick={handleZoomIn}
+            aria-label="Zoom in"
+            title="Zoom in"
+          >
+            +
+          </button>
+        </div>
 
-        {/* Zoom Out - */}
+        {/* Fullscreen Toggle */}
         <button
           type="button"
-          className="pill-btn zoom-btn zoom-out"
-          onClick={handleZoomOut}
-          aria-label="Zoom out"
-          title="Zoom out"
+          className="dock-btn hide-on-mobile"
+          onClick={handleFullscreen}
+          aria-label="Toggle Fullscreen"
+          title="Fullscreen (F)"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-        </button>
-
-        {/* Zoom Percentage (Click to reset 100%) */}
-        <button
-          type="button"
-          className="zoom-percentage-btn"
-          onClick={handleZoomReset}
-          title="Click to reset zoom to 100%"
-        >
-          {zoomLevel}%
-        </button>
-
-        {/* Zoom In + */}
-        <button
-          type="button"
-          className="pill-btn zoom-btn zoom-in"
-          onClick={handleZoomIn}
-          aria-label="Zoom in"
-          title="Zoom in"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-        </button>
-
-        {/* Movement Help (?) */}
-        <button
-          type="button"
-          className="pill-btn help-btn"
-          onClick={onOpenHelp}
-          aria-label="Shortcuts"
-          title="Movement & Shortcuts guide"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10" />
-            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-            <line x1="12" y1="17" x2="12.01" y2="17" />
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
           </svg>
         </button>
       </div>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { OFFICE_DIMENSIONS } from '../office/OfficeMap';
+import { OFFICE_DIMENSIONS, OFFICE_ZONES } from '../office/OfficeMap';
 
 export default function MiniMapOverlay({
   isOpen,
@@ -10,8 +10,8 @@ export default function MiniMapOverlay({
 }) {
   if (!isOpen) return null;
 
-  const width = 260;
-  const height = 161; // aspect ratio matching 1440 x 894
+  const width = 280;
+  const height = 174; // aspect ratio matching 1440 x 894
 
   const toMiniX = (worldX) => (worldX / OFFICE_DIMENSIONS.width) * width;
   const toMiniY = (worldY) => (worldY / OFFICE_DIMENSIONS.height) * height;
@@ -28,11 +28,11 @@ export default function MiniMapOverlay({
   };
 
   return (
-    <div className="ovice-minimap-card modern-minimap glass-panel" role="region" aria-label="Floor radar mini-map">
+    <div className="proxi-minimap-card glass-panel" role="region" aria-label="Floor radar mini-map">
       <div className="minimap-header">
         <div className="minimap-title-group">
           <span className="radar-live-beacon" />
-          <span className="radar-title">Floor 6 Radar</span>
+          <span className="radar-title">Floor 4 Spatial Radar</span>
         </div>
         <button type="button" className="minimap-close" onClick={onClose} aria-label="Close radar">✕</button>
       </div>
@@ -43,19 +43,29 @@ export default function MiniMapOverlay({
         onClick={handleMapClick}
         title="Click anywhere to walk directly there"
       >
-        {/* Floor plan base */}
-        <img
-          src="/office_map.png"
-          alt="Floor plan"
-          className="minimap-bg"
-          onError={(e) => { e.target.style.display = 'none'; }}
-        />
+        {/* Render Zone Outlines */}
+        {OFFICE_ZONES.map((zone) => (
+          <div
+            key={zone.id}
+            className="minimap-zone-box"
+            style={{
+              left: `${toMiniX(zone.bounds.x)}px`,
+              top: `${toMiniY(zone.bounds.y)}px`,
+              width: `${toMiniX(zone.bounds.width)}px`,
+              height: `${toMiniY(zone.bounds.height)}px`,
+              borderColor: `${zone.colorAccent}66`,
+              background: `${zone.colorAccent}14`,
+            }}
+          >
+            <span className="zone-mini-tag">{zone.name.split(' ')[0]}</span>
+          </div>
+        ))}
 
         {/* Radar grid and sweep animation */}
         <div className="radar-grid-overlay" />
         <div className="radar-sweep-beam" />
 
-        {/* Remote participant pins */}
+        {/* Coworker dot clusters */}
         {participants.map((p) => {
           if (localUser && p.id === localUser.id) return null;
           return (
@@ -65,7 +75,7 @@ export default function MiniMapOverlay({
               style={{
                 left: `${toMiniX(p.x)}px`,
                 top: `${toMiniY(p.y)}px`,
-                background: p.ringColor || p.avatarColor || '#8b5cf6',
+                background: p.ringColor || p.avatarColor || '#6366f1',
               }}
               title={`${p.displayName} (${p.status || 'Active'})`}
             >
@@ -91,7 +101,7 @@ export default function MiniMapOverlay({
       </div>
 
       <div className="minimap-hint">
-        <span>📍 Click floor plan to navigate instantly</span>
+        <span>📍 Click zone to navigate instantly</span>
       </div>
     </div>
   );

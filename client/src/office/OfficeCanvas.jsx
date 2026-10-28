@@ -1,7 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { OfficeRenderer } from './OfficeRenderer';
 import { MovementController } from './MovementController';
-import { OFFICE_DIMENSIONS, OFFICE_OBSTACLES } from './OfficeMap';
+import {
+  OFFICE_DIMENSIONS,
+  OFFICE_OBSTACLES,
+  WORKSTATION_DESKS,
+  INTERACTIVE_OBJECTS,
+} from './OfficeMap';
 import { sounds } from '../services/soundEffects';
 
 export default function OfficeCanvas({
@@ -14,6 +19,11 @@ export default function OfficeCanvas({
   onPanChange,
   recenterTrigger = 0,
   spatialConfig = null,
+  lightingMode = 'daylight',
+  onOpenWhiteboard,
+  onOpenBroadcast,
+  onDeskSit,
+  onToast,
 }) {
   const canvasRef = useRef(null);
   const frameRef = useRef(null);
@@ -29,8 +39,30 @@ export default function OfficeCanvas({
   const hasMovedDragRef = useRef(false);
   const nearbyUsersRef = useRef(new Set());
 
-  const latestPropsRef = useRef({ localUser, participants, onLocalMove, zoom, spatialConfig });
-  latestPropsRef.current = { localUser, participants, onLocalMove, zoom, spatialConfig };
+  const latestPropsRef = useRef({
+    localUser,
+    participants,
+    onLocalMove,
+    zoom,
+    spatialConfig,
+    lightingMode,
+    onOpenWhiteboard,
+    onOpenBroadcast,
+    onDeskSit,
+    onToast,
+  });
+  latestPropsRef.current = {
+    localUser,
+    participants,
+    onLocalMove,
+    zoom,
+    spatialConfig,
+    lightingMode,
+    onOpenWhiteboard,
+    onOpenBroadcast,
+    onDeskSit,
+    onToast,
+  };
 
   // Recenter on local user if requested
   useEffect(() => {
@@ -64,6 +96,7 @@ export default function OfficeCanvas({
         zoom: latestPropsRef.current.zoom,
         panX: panRef.current.x,
         panY: panRef.current.y,
+        lightingMode: latestPropsRef.current.lightingMode,
       });
     };
 
@@ -94,7 +127,7 @@ export default function OfficeCanvas({
     const resizeObserver = new ResizeObserver(resizeCanvas);
     resizeObserver.observe(canvas);
 
-    // Pointer events for smooth click-to-walk and drag-to-pan
+    // Pointer events for smooth click-to-walk, desk-docking, and drag-to-pan
     const handlePointerDown = (event) => {
       isDraggingRef.current = true;
       hasMovedDragRef.current = false;
@@ -120,7 +153,6 @@ export default function OfficeCanvas({
 
     const handlePointerUp = (event) => {
       if (!hasMovedDragRef.current && isDraggingRef.current) {
-        // Simple click without dragging -> Move avatar to clicked position
         const rect = canvas.getBoundingClientRect();
         const scale = renderRef.current?.scale || 1;
         const offsetX = renderRef.current?.offsetX || 0;
@@ -128,8 +160,64 @@ export default function OfficeCanvas({
         const worldX = (event.clientX - rect.left - offsetX) / scale;
         const worldY = (event.clientY - rect.top - offsetY) / scale;
 
-        movementRef.current?.setTarget(worldX, worldY);
-        sounds.playClick();
+        // Check if user clicked an interactive office object
+        let handledObject = false;
+        for (const obj of INTERACTIVE_OBJECTS) {
+          const dist = Math.hypot(worldX - obj.x, worldY - obj.y);
+          if (dist <= obj.interactionRadius) {
+            handledObject = true;
+            if (obj.type === 'whiteboard') {
+              sounds.playClick();
+              if (latestPropsRef.current.onOpenWhiteboard) {
+                latestPropsRef.current.onOpenWhiteboard();
+              }
+            } else if (obj.type === 'broadcast-pillar') {
+              sounds.playClick();
+              if (latestPropsRef.current.onOpenBroadcast) {
+                latestPropsRef.current.onOpenBroadcast();
+              }
+            } else if (obj.type === 'coffee-station') {
+              sounds.playProximityChime();
+              if (latestPropsRef.current.onToast) {
+                latestPropsRef.current.onToast('☕ Fresh espresso poured! Energy restored.');
+              }
+            }
+            break;
+          }
+        }
+
+        // Check if user clicked on an empty desk chair for Click-to-Sit Docking
+        if (!handledObject) {
+          let seatedAtDesk = null;
+          for (const desk of WORKSTATION_DESKS) {
+            const chairDist = Math.hypot(worldX - desk.chair.x, worldY - desk.chair.y);
+            const deskDist = Math.hypot(worldX - desk.x, worldY - desk.y);
+            if (chairDist <= 38 || deskDist <= 42) {
+              seatedAtDesk = desk;
+              break;
+            }
+          }
+
+          if (seatedAtDesk) {
+            sounds.playClick();
+            // Dock avatar into desk chair coordinates and set orientation facing workstation
+            const chairPos = seatedAtDesk.chair;
+            const facingAngle = seatedAtDesk.orientation === 'south' ? -Math.PI * 0.5 : Math.PI * 0.5;
+
+            movementRef.current?.setTarget(chairPos.x, chairPos.y);
+
+            if (latestPropsRef.current.onDeskSit) {
+              latestPropsRef.current.onDeskSit(seatedAtDesk, facingAngle);
+            }
+            if (latestPropsRef.current.onToast) {
+              latestPropsRef.current.onToast(`Seated at ${seatedAtDesk.label} · Deep Work Mode Active`);
+            }
+          } else {
+            // Normal free floor walk
+            movementRef.current?.setTarget(worldX, worldY);
+            sounds.playClick();
+          }
+        }
       }
       isDraggingRef.current = false;
     };
@@ -143,7 +231,12 @@ export default function OfficeCanvas({
     const renderFrame = (timestamp) => {
       const deltaSeconds = Math.min((timestamp - lastTimeRef.current) / 1000 || 0.016, 0.05);
       lastTimeRef.current = timestamp;
-      const { localUser: currentUser, participants: currentParticipants, onLocalMove: moveUser } = latestPropsRef.current;
+      const {
+        localUser: currentUser,
+        participants: currentParticipants,
+        onLocalMove: moveUser,
+        lightingMode: currentLighting,
+      } = latestPropsRef.current;
 
       if (currentUser?.id !== movementUserIdRef.current) {
         movementUserIdRef.current = currentUser?.id || null;
@@ -151,8 +244,19 @@ export default function OfficeCanvas({
       }
 
       if (currentUser && movementPositionRef.current) {
+        const prevX = movementPositionRef.current.x;
+        const prevY = movementPositionRef.current.y;
+
         const updated = movementRef.current.update(movementPositionRef.current, deltaSeconds);
         movementPositionRef.current = updated;
+
+        // Calculate dynamic facing orientation from movement trajectory
+        const dx = updated.x - prevX;
+        const dy = updated.y - prevY;
+        let newFacing = currentUser.facing;
+        if (Math.hypot(dx, dy) > 0.4) {
+          newFacing = Math.atan2(dy, dx);
+        }
 
         // Check proximity with nearby participants
         const nearby = new Set();
@@ -162,7 +266,7 @@ export default function OfficeCanvas({
             if (dist <= 240) {
               nearby.add(p.id);
               if (!nearbyUsersRef.current.has(p.id)) {
-                sounds.playProximityChime(); // Play proximity sound when entering range!
+                sounds.playProximityChime();
               }
             }
           }
@@ -171,11 +275,11 @@ export default function OfficeCanvas({
 
         if (
           moveUser &&
-          (updated.x !== currentUser.x || updated.y !== currentUser.y) &&
+          (updated.x !== currentUser.x || updated.y !== currentUser.y || newFacing !== currentUser.facing) &&
           timestamp - lastBroadcastRef.current >= 60
         ) {
           lastBroadcastRef.current = timestamp;
-          moveUser(updated);
+          moveUser({ ...updated, facing: newFacing });
         }
       }
 
@@ -186,13 +290,19 @@ export default function OfficeCanvas({
         renderRef.current.zoom = latestPropsRef.current.zoom;
         renderRef.current.panX = panRef.current.x;
         renderRef.current.panY = panRef.current.y;
-        renderRef.current.scale = Math.min(rect.width / OFFICE_DIMENSIONS.width, rect.height / OFFICE_DIMENSIONS.height) * (latestPropsRef.current.zoom / 100);
-        renderRef.current.offsetX = (rect.width - OFFICE_DIMENSIONS.width * renderRef.current.scale) / 2 + panRef.current.x;
-        renderRef.current.offsetY = (rect.height - OFFICE_DIMENSIONS.height * renderRef.current.scale) / 2 + panRef.current.y;
+        renderRef.current.lightingMode = currentLighting;
+        renderRef.current.scale =
+          Math.min(rect.width / OFFICE_DIMENSIONS.width, rect.height / OFFICE_DIMENSIONS.height) *
+          (latestPropsRef.current.zoom / 100);
+        renderRef.current.offsetX =
+          (rect.width - OFFICE_DIMENSIONS.width * renderRef.current.scale) / 2 + panRef.current.x;
+        renderRef.current.offsetY =
+          (rect.height - OFFICE_DIMENSIONS.height * renderRef.current.scale) / 2 + panRef.current.y;
 
-        const displayUser = currentUser && movementPositionRef.current
-          ? { ...currentUser, ...movementPositionRef.current }
-          : null;
+        const displayUser =
+          currentUser && movementPositionRef.current
+            ? { ...currentUser, ...movementPositionRef.current }
+            : null;
 
         renderRef.current.drawScene(
           displayUser,
@@ -200,6 +310,7 @@ export default function OfficeCanvas({
           deltaSeconds,
           movementRef.current?.target,
           latestPropsRef.current.spatialConfig,
+          OFFICE_OBSTACLES,
         );
       }
 
