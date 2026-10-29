@@ -126,8 +126,8 @@ export const OFFICE_OBSTACLES = [
 export const OFFICE_ZONES = [
   {
     id: 'focus-pods',
-    name: 'Open Focus Pods',
-    label: 'Open Focus Pods',
+    name: 'Pod Stations / Open Desks',
+    label: 'Pod Stations / Open Desks',
     sublabel: 'Standing Desks & Dual 4K Displays',
     bounds: { x: 440, y: 50, width: 580, height: 530 },
     floorType: 'oak-parquet', // light warm oak herringbone parquet
@@ -145,9 +145,9 @@ export const OFFICE_ZONES = [
     floorType: 'walnut-parquet',
     colorAccent: '#10b981',
     icon: '📊',
-    tag: 'Soundproof -18dB',
+    tag: 'Acoustic Boardroom (Dampened -12dB • 3.4m)',
     isAcousticZone: true,
-    dampeningDb: -18,
+    dampeningDb: -12,
   },
   {
     id: 'huddle-booth',
@@ -166,7 +166,7 @@ export const OFFICE_ZONES = [
     id: 'lounge',
     name: 'Lounge & Watercooler',
     label: 'Lounge & Watercooler',
-    sublabel: 'Espresso Bar · Curved Terracotta Sofas',
+    sublabel: 'Espresso Bar · Curved Horseshoe Lounge',
     bounds: { x: 50, y: 530, width: 370, height: 330 },
     floorType: 'terrazzo',
     colorAccent: '#f59e0b',
@@ -190,7 +190,7 @@ export const OFFICE_ZONES = [
     id: 'presentation',
     name: 'Townhall & Broadcast Stage',
     label: 'Townhall & Broadcast Stage',
-    sublabel: 'Interactive Broadcast Pillar · Keynote Area',
+    sublabel: 'Screen Broadcast Pillar · Keynote Area',
     bounds: { x: 440, y: 600, width: 580, height: 260 },
     floorType: 'wood-stage',
     colorAccent: '#ec4899',
@@ -384,7 +384,7 @@ export const WORKSTATION_DESKS = [
    ========================================================================= */
 
 export const GLASS_PARTITIONS = [
-  // Boardroom Glass Enclosure
+  // Boardroom Glass Enclosure (Glass -24dB)
   {
     id: 'wall-boardroom-top',
     x1: 1040,
@@ -392,7 +392,7 @@ export const GLASS_PARTITIONS = [
     x2: 1400,
     y2: 380,
     type: 'glass',
-    dampeningDb: -18,
+    dampeningDb: -24,
     hasDoor: true,
     doorX: 1120,
     doorWidth: 60,
@@ -404,7 +404,7 @@ export const GLASS_PARTITIONS = [
     x2: 1040,
     y2: 860,
     type: 'glass',
-    dampeningDb: -18,
+    dampeningDb: -24,
     hasDoor: false,
   },
   // Executive Huddle Glass Enclosure
@@ -468,27 +468,27 @@ export const INTERACTIVE_OBJECTS = [
   {
     id: 'obj-broadcast-screen',
     type: 'broadcast-pillar',
-    name: 'Stage Screen Broadcast Pillar',
+    name: 'Screen Broadcast Pillar',
     zone: 'presentation',
     x: 730,
     y: 650,
-    width: 140,
-    height: 28,
+    width: 150,
+    height: 30,
     interactionRadius: 110,
-    label: 'Broadcast Screen to Zone',
+    label: 'Screen Broadcast Pillar',
     icon: '📡',
   },
   {
     id: 'obj-coffee-bar',
     type: 'coffee-station',
-    name: 'Artisan Espresso Station',
+    name: 'Espresso Bar',
     zone: 'lounge',
     x: 120,
     y: 570,
     width: 110,
     height: 48,
     interactionRadius: 75,
-    label: 'Grab a Coffee',
+    label: 'Espresso Bar',
     icon: '☕',
   },
 ];
@@ -499,7 +499,7 @@ export const INTERACTIVE_OBJECTS = [
    ========================================================================= */
 
 export const ARCHITECTURAL_ELEMENTS = {
-  // Boardroom Conference Table
+  // Boardroom Conference Table (6 chairs)
   boardroomTable: {
     x: 1220,
     y: 610,
@@ -513,8 +513,6 @@ export const ARCHITECTURAL_ELEMENTS = {
       { x: 1160, y: 670, angle: -Math.PI * 0.5 },
       { x: 1220, y: 670, angle: -Math.PI * 0.5 },
       { x: 1280, y: 670, angle: -Math.PI * 0.5 },
-      { x: 1115, y: 610, angle: 0 },
-      { x: 1325, y: 610, angle: Math.PI },
     ],
   },
   // Huddle Pod Table

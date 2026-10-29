@@ -53,37 +53,53 @@ export class OfficeRenderer {
     const floorW = OFFICE_DIMENSIONS.width * this.scale;
     const floorH = OFFICE_DIMENSIONS.height * this.scale;
 
-    // Outer neutral canvas backdrop (Warm studio border)
-    ctx.fillStyle = '#0f172a'; // Deep slate viewport surrounding canvas
+    // Outer container: Deep dark navy/slate surrounding bezel (#0B0E17)
+    ctx.fillStyle = '#0B0E17';
     ctx.fillRect(0, 0, this.width, this.height);
 
     // Floor base shadow (building floor plate elevation)
     ctx.save();
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
-    ctx.shadowBlur = 32 * this.scale;
-    ctx.shadowOffsetY = 16 * this.scale;
-    ctx.fillStyle = '#f8fafc';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+    ctx.shadowBlur = 48 * this.scale;
+    ctx.shadowOffsetY = 24 * this.scale;
+    ctx.fillStyle = '#F8F4EC';
     ctx.fillRect(floorX, floorY, floorW, floorH);
     ctx.restore();
 
-    // Primary Floor: Light Scandinavian Oak Wood Base
-    const oakGrad = ctx.createLinearGradient(floorX, floorY, floorX + floorW, floorY + floorH);
-    oakGrad.addColorStop(0, '#f5efe6');
-    oakGrad.addColorStop(1, '#ebdccb');
-    ctx.fillStyle = oakGrad;
+    // Primary Floor: Warm architectural blueprint cream/grid canvas (#F8F4EC)
+    ctx.fillStyle = '#F8F4EC';
     ctx.fillRect(floorX, floorY, floorW, floorH);
 
-    // Subtle Architectural Wood Plank Lines
+    // Subtle Architectural Blueprint Grid (#E5E0D8)
     ctx.save();
-    ctx.strokeStyle = 'rgba(180, 150, 120, 0.15)';
+    ctx.strokeStyle = '#E5E0D8';
     ctx.lineWidth = 1 * this.scale;
-    const plankStep = 28 * this.scale;
-    for (let py = floorY; py < floorY + floorH; py += plankStep) {
+    const gridStep = 36 * this.scale;
+    for (let px = floorX; px <= floorX + floorW; px += gridStep) {
+      ctx.beginPath();
+      ctx.moveTo(px, floorY);
+      ctx.lineTo(px, floorY + floorH);
+      ctx.stroke();
+    }
+    for (let py = floorY; py <= floorY + floorH; py += gridStep) {
       ctx.beginPath();
       ctx.moveTo(floorX, py);
       ctx.lineTo(floorX + floorW, py);
       ctx.stroke();
     }
+
+    // Subtle desk layout guideline alignments
+    ctx.strokeStyle = 'rgba(212, 185, 150, 0.18)';
+    ctx.lineWidth = 1.2 * this.scale;
+    ctx.setLineDash([6 * this.scale, 6 * this.scale]);
+    // Layout guide across center
+    ctx.beginPath();
+    ctx.moveTo(floorX + 440 * this.scale, floorY + 50 * this.scale);
+    ctx.lineTo(floorX + 440 * this.scale, floorY + floorH - 50 * this.scale);
+    ctx.moveTo(floorX + 1030 * this.scale, floorY + 50 * this.scale);
+    ctx.lineTo(floorX + 1030 * this.scale, floorY + floorH - 50 * this.scale);
+    ctx.stroke();
+    ctx.setLineDash([]);
     ctx.restore();
   }
 
@@ -182,6 +198,69 @@ export class OfficeRenderer {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText('🤫 MUTE RADIUS', pillX + 48 * this.scale, pillY + 10 * this.scale);
+      }
+
+      // Acoustic Boardroom Tag Pill
+      if (zone.id === 'boardroom') {
+        const pillW = 246 * this.scale;
+        const pillH = 22 * this.scale;
+        const pillX = zx + zw - pillW - 14 * this.scale;
+        const pillY = zy + 12 * this.scale;
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.14)';
+        ctx.beginPath();
+        ctx.roundRect(pillX, pillY, pillW, pillH, 11 * this.scale);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(16, 185, 129, 0.55)';
+        ctx.lineWidth = 1.2 * this.scale;
+        ctx.stroke();
+
+        ctx.fillStyle = '#059669';
+        ctx.font = `700 ${Math.max(8, 9 * this.scale)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('Acoustic Boardroom (Dampened -12dB • 3.4m)', pillX + pillW / 2, pillY + pillH / 2);
+      }
+
+      // Townhall & Broadcast Stage Tag Pill
+      if (zone.id === 'presentation') {
+        const pillW = 160 * this.scale;
+        const pillH = 22 * this.scale;
+        const pillX = zx + zw - pillW - 14 * this.scale;
+        const pillY = zy + 12 * this.scale;
+        ctx.fillStyle = 'rgba(245, 158, 11, 0.15)';
+        ctx.beginPath();
+        ctx.roundRect(pillX, pillY, pillW, pillH, 11 * this.scale);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(245, 158, 11, 0.6)';
+        ctx.lineWidth = 1.2 * this.scale;
+        ctx.stroke();
+
+        ctx.fillStyle = '#b45309';
+        ctx.font = `700 ${Math.max(8, 9 * this.scale)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('📡 Broadcast Stage', pillX + pillW / 2, pillY + pillH / 2);
+      }
+
+      // Lounge Espresso Bar Marker Pill
+      if (zone.id === 'lounge') {
+        const pillW = 110 * this.scale;
+        const pillH = 22 * this.scale;
+        const pillX = zx + zw - pillW - 14 * this.scale;
+        const pillY = zy + 12 * this.scale;
+        ctx.fillStyle = 'rgba(249, 115, 22, 0.14)';
+        ctx.beginPath();
+        ctx.roundRect(pillX, pillY, pillW, pillH, 11 * this.scale);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(249, 115, 22, 0.5)';
+        ctx.lineWidth = 1.2 * this.scale;
+        ctx.stroke();
+
+        ctx.fillStyle = '#c2410c';
+        ctx.font = `700 ${Math.max(8, 9 * this.scale)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('☕ Espresso Bar', pillX + pillW / 2, pillY + pillH / 2);
       }
 
       ctx.restore();
@@ -838,6 +917,43 @@ export class OfficeRenderer {
     ctx.restore();
   }
 
+  /**
+   * Proximity Audio Rings: Concentric faint dashed circles around avatars indicating dynamic audio hearing radius.
+   */
+  drawAvatarAudioRings(user) {
+    const ctx = this.ctx;
+    const sx = this.screenX(user.x);
+    const sy = this.screenY(user.y);
+    const isSpeaking = Boolean(user.isSpeaking);
+
+    ctx.save();
+    const ringRadii = [48 * this.scale, 86 * this.scale, 134 * this.scale];
+    ctx.setLineDash([3 * this.scale, 4 * this.scale]);
+
+    ringRadii.forEach((r, idx) => {
+      ctx.beginPath();
+      ctx.arc(sx, sy, r, 0, Math.PI * 2);
+      ctx.lineWidth = (1.2 - idx * 0.2) * this.scale;
+      if (isSpeaking) {
+        // Neon mint / cyan glowing faint dashed audio rings
+        ctx.strokeStyle = idx === 0
+          ? 'rgba(16, 185, 129, 0.45)'
+          : idx === 1
+          ? 'rgba(6, 182, 212, 0.32)'
+          : 'rgba(139, 92, 246, 0.22)';
+      } else {
+        ctx.strokeStyle = idx === 0
+          ? 'rgba(100, 116, 139, 0.26)'
+          : idx === 1
+          ? 'rgba(148, 163, 184, 0.18)'
+          : 'rgba(203, 213, 225, 0.12)';
+      }
+      ctx.stroke();
+    });
+
+    ctx.restore();
+  }
+
   /* =========================================================================
      8. MASTER SCENE DRAW LOOP
      ========================================================================= */
@@ -923,7 +1039,12 @@ export class OfficeRenderer {
     // Depth sorting by Y coordinate for natural 2.5D overlap
     renderedUsers.sort((a, b) => a.y - b.y);
 
-    // 10. Draw avatars with directional orientation & animated status rings
+    // 10. Proximity Audio Rings: Concentric faint dashed circles around avatars
+    for (const user of renderedUsers) {
+      this.drawAvatarAudioRings(user);
+    }
+
+    // 11. Draw avatars with directional orientation & animated status rings
     for (const user of renderedUsers) {
       const sx = this.screenX(user.x);
       const sy = this.screenY(user.y);

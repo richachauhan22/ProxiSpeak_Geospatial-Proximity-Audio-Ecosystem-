@@ -5,11 +5,35 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet" />
-    <title>ProxiSpeak — Geospatial Virtual Office</title>
-    <meta name="description" content="Immersive spatial audio and collaborative virtual office with live presence and proximity navigation." />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
+    <title>ProxiSpeak — 2D Spatial Audio Virtual Office</title>
+    <meta name="description" content="Modern 2D Spatial Audio Virtual Office interface with proximity audio rings, zoned floorplans, and real-time collaboration." />
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              mint: '#10B981',
+              cyanAccent: '#06B6D4',
+              amberAccent: '#F59E0B',
+              purpleAccent: '#8B5CF6',
+              bezel: '#0B0E17',
+              canvasCream: '#F8F4EC',
+              canvasGrid: '#E5E0D8',
+            },
+            fontFamily: {
+              sans: ['Plus Jakarta Sans', 'Inter', 'system-ui', 'sans-serif'],
+              mono: ['JetBrains Mono', 'monospace'],
+            },
+          },
+        },
+      };
+    </script>
   </head>
-  <body>
+  <body class="bg-[#0B0E17] text-slate-100 antialiased overflow-hidden select-none">
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

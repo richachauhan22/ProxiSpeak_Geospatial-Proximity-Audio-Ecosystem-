@@ -1963,7 +1963,7 @@ a {
   display: flex;
   flex-direction: column;
   position: relative;
-  background: #f0ebe1;
+  background: #0B0E17;
   overflow: hidden;
 }
 
@@ -2274,7 +2274,7 @@ a {
   flex: 1;
   position: relative;
   overflow: hidden;
-  background: #f0ebe1;
+  background: #0B0E17;
 }
 
 .modern-canvas-holder canvas {

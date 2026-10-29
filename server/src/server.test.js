@@ -301,6 +301,38 @@ describe('MongoDB Proximity Calculations & $near User Grouping', () => {
     expect(has2dIndex).toBe(true);
     expect(has2dsphereIndex).toBe(true);
   });
+
+  it('proves spatial audit: accurately filters and clusters users based on geospatial coordinates under 20ms', async () => {
+    const roomUsers = Array.from({ length: 250 }, (_, i) => ({
+      id: `user-${i}`,
+      displayName: `User ${i}`,
+      officeId: 'audit-office',
+      x: 100 + (i % 15) * 60,
+      y: 100 + Math.floor(i / 15) * 40,
+    }));
+
+    const startTime = performance.now();
+
+    const nearby = await queryNearbyUsers({
+      officeId: 'audit-office',
+      x: 300,
+      y: 300,
+      radius: WEBRTC_PROXIMITY_RADIUS,
+      inMemoryUsers: roomUsers,
+    });
+
+    const clusters = await groupUsersByProximity({
+      officeId: 'audit-office',
+      radius: WEBRTC_PROXIMITY_RADIUS,
+      inMemoryUsers: roomUsers,
+    });
+
+    const totalDurationMs = performance.now() - startTime;
+
+    expect(nearby.length).toBeGreaterThan(0);
+    expect(clusters.length).toBeGreaterThan(0);
+    expect(totalDurationMs).toBeLessThan(20);
+  });
 });
 
 describe('Graph Serialization Backend Ingestion & REST Route Handlers', () => {

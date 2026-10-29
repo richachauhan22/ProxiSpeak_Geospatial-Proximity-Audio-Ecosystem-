@@ -1,14 +1,31 @@
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Copy,
+  Check,
+  Sun,
+  Sunset,
+  Moon,
+  PenTool,
+  Radio,
+  Signal,
+  Bell,
+  Settings,
+  LogOut,
+  Users,
+  Sparkles,
+} from 'lucide-react';
+import { sounds } from '../services/soundEffects';
 
 export default function OviceHeader({
-  officeId = 'San Francisco HQ / 4F Design Lab',
+  officeId = 'oVice HQ / C-03',
   participantCount = 5,
-  connectionStatus = 'Fast',
-  onToggleMenu,
+  connectionStatus = '<18ms WebRTC Mesh',
   onToggleParticipants,
   onToggleChat,
   onToggleCalendar,
   onToggleNotifications,
+  onOpenSettings,
   onOpenHelp,
   onLeaveOffice,
   chatOpen = false,
@@ -19,263 +36,246 @@ export default function OviceHeader({
   onLightingChange,
   onOpenWhiteboard,
   onOpenBroadcast,
+  participants = [],
 }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [copiedToast, setCopiedToast] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [showUserTooltip, setShowUserTooltip] = useState(false);
 
-  const handleCopy = () => {
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(window.location.href);
-    }
-    setCopiedToast(true);
-    setTimeout(() => setCopiedToast(false), 2200);
+  const handleCopy = (e) => {
+    e?.stopPropagation();
+    try {
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(window.location.href);
+      }
+    } catch (_) {}
+    setCopied(true);
+    sounds?.playClick?.();
     if (onCopyLink) onCopyLink();
+    setTimeout(() => setCopied(false), 2200);
   };
 
-  const handleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
-    } else {
-      document.exitFullscreen().catch(() => {});
-    }
-  };
+  const activeAvatars = [
+    { id: 'u-1', name: 'Mia', initial: 'M', bg: 'bg-emerald-500', photo: '/avatar_mia.png' },
+    { id: 'u-2', name: 'Oliver', initial: 'O', bg: 'bg-rose-500', photo: '/avatar_oliver.png' },
+    { id: 'u-3', name: 'Alex', initial: 'A', bg: 'bg-purple-500', photo: '/avatar_alex.png' },
+    { id: 'u-4', name: 'Marcus', initial: 'M', bg: 'bg-blue-500', photo: '/avatar_marcus.png' },
+  ];
 
   return (
-    <header className="proxi-topbar floating-glassmorphic-nav" role="banner">
-      <div className="topbar-left">
-        {/* Workspace Dropdown Menu */}
-        <div className="topbar-menu-wrapper">
-          <button
-            type="button"
-            className={`topbar-icon-button menu-toggle-btn ${menuOpen ? 'active' : ''}`}
-            onClick={() => setMenuOpen((prev) => !prev)}
-            aria-label="Toggle workspace navigation menu"
-            title="Office Menu"
-          >
-            <svg width="18" height="14" viewBox="0 0 18 14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-              <line x1="0" y1="1" x2="18" y2="1" />
-              <line x1="0" y1="7" x2="18" y2="7" />
-              <line x1="0" y1="13" x2="18" y2="13" />
-            </svg>
-          </button>
-
-          {menuOpen && (
-            <div className="topbar-dropdown-menu glass-dropdown" onClick={() => setMenuOpen(false)}>
-              <div className="dropdown-item-header">
-                <div className="header-room-title">{officeId}</div>
-                <div className="header-room-subtitle">Floor 4 · Spatial Workplace & Audio Hub</div>
-              </div>
-              <div className="dropdown-separator" />
-              <button type="button" className="dropdown-menu-item" onClick={handleCopy}>
-                <span className="item-icon">🔗</span>
-                <span className="item-text">{copiedToast ? 'Copied Link!' : 'Copy Office Link'}</span>
-              </button>
-              <button
-                type="button"
-                className="dropdown-menu-item"
-                onClick={() => {
-                  if (onToggleMenu) onToggleMenu();
-                }}
-              >
-                <span className="item-icon">⚙️</span>
-                <span className="item-text">Audio & Workspace Settings</span>
-              </button>
-              <button
-                type="button"
-                className="dropdown-menu-item"
-                onClick={() => {
-                  if (onOpenHelp) onOpenHelp();
-                }}
-              >
-                <span className="item-icon">⌨️</span>
-                <span className="item-text">Keyboard & Movement Controls</span>
-              </button>
-              <button
-                type="button"
-                className="dropdown-menu-item"
-                onClick={() => {
-                  if (onToggleParticipants) onToggleParticipants();
-                }}
-              >
-                <span className="item-icon">👥</span>
-                <span className="item-text">Floor Teammates ({participantCount})</span>
-              </button>
-              <div className="dropdown-separator" />
-              <button
-                type="button"
-                className="dropdown-menu-item item-danger"
-                onClick={() => {
-                  if (onLeaveOffice) onLeaveOffice();
-                }}
-              >
-                <span className="item-icon">🚪</span>
-                <span className="item-text">Leave Virtual Office</span>
-              </button>
+    <header className="fixed top-3 left-0 right-0 z-40 max-w-7xl mx-auto px-3 sm:px-6 pointer-events-none">
+      <motion.div
+        initial={{ y: -24, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.35, ease: 'easeOut' }}
+        className="pointer-events-auto flex items-center justify-between gap-3 px-4 py-2.5 rounded-2xl bg-slate-900/85 backdrop-blur-md border border-slate-700/60 text-slate-100 shadow-2xl"
+      >
+        {/* Left Section: Logo, Divider & Room Tag */}
+        <div className="flex items-center gap-3">
+          {/* Logo */}
+          <div className="flex items-center gap-2.5 cursor-pointer group select-none">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-cyan-500 via-blue-600 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/25 ring-1 ring-white/20 group-hover:scale-105 transition-transform">
+              <Sparkles className="w-4 h-4 text-white" />
             </div>
-          )}
-        </div>
-
-        <span className="topbar-divider" />
-
-        {/* Clean ProxiSpeak Branding with Wave Icon */}
-        <div className="proxi-brand" aria-label="ProxiSpeak">
-          <div className="brand-logo-mark">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-              <path
-                d="M12 2L4 6.5V17.5L12 22L20 17.5V6.5L12 2Z"
-                stroke="#6366f1"
-                strokeWidth="2.2"
-                strokeLinejoin="round"
-              />
-              <circle cx="12" cy="12" r="3" fill="#10b981" />
-              <path d="M9 12a3 3 0 0 1 6 0" stroke="#6366f1" strokeWidth="1.5" />
-            </svg>
+            <span className="font-extrabold text-base tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent">
+              ProxiSpeak
+            </span>
           </div>
-          <span className="brand-text">
-            Proxi<span>Speak</span>
-          </span>
-        </div>
 
-        <span className="topbar-divider" />
+          {/* Vertical Divider */}
+          <div className="h-5 w-px bg-slate-700/70" />
 
-        {/* Room / Zone Breadcrumb with Quick Copy */}
-        <div className="room-breadcrumb" onClick={handleCopy} title="Click to copy invite link">
-          <span className="floor-badge">4F</span>
-          <span className="room-path-label">{officeId}</span>
-          <span className="copy-link-pill">{copiedToast ? 'Copied!' : 'Copy'}</span>
-        </div>
-      </div>
-
-      <div className="topbar-right">
-        {/* Dynamic Lighting Shift Selector (Daylight / Sunset / Studio Evening) */}
-        <div className="lighting-selector" title="Daylight & Ambient Light Shift">
-          {[
-            { id: 'daylight', icon: '☀️', label: 'Day' },
-            { id: 'sunset', icon: '🌅', label: 'Sunset' },
-            { id: 'studio', icon: '🌙', label: 'Studio' },
-          ].map((m) => (
+          {/* Room Tag with Purple Badge, Room name, and Copy button */}
+          <div className="flex items-center gap-2 text-xs font-medium text-slate-300 bg-slate-800/80 hover:bg-slate-800 px-2.5 py-1.5 rounded-xl border border-slate-700/50 transition-colors">
+            <span className="px-1.5 py-0.5 rounded-md text-[10px] font-bold tracking-wider bg-purple-500/20 text-purple-300 border border-purple-500/30">
+              4F
+            </span>
+            <span className="font-semibold text-slate-200 hidden sm:inline">{officeId}</span>
+            <span className="font-semibold text-slate-200 sm:hidden">HQ / C-03</span>
             <button
-              key={m.id}
               type="button"
-              className={`lighting-pill ${lightingMode === m.id ? 'active' : ''}`}
-              onClick={() => onLightingChange && onLightingChange(m.id)}
-              title={`${m.label} Ambient Lighting`}
+              onClick={handleCopy}
+              className="ml-1 p-1 rounded-md text-slate-400 hover:text-cyan-400 hover:bg-slate-700/60 active:scale-95 transition-all"
+              title="Copy office link"
+              aria-label="Copy office link"
             >
-              <span>{m.icon}</span>
+              {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
             </button>
-          ))}
+          </div>
         </div>
 
-        <span className="topbar-divider" />
+        {/* Center Section: Ambience Switcher & Action Pills */}
+        <div className="hidden md:flex items-center gap-2.5">
+          {/* Segmented Ambience Pill */}
+          <div className="flex items-center p-0.5 rounded-xl bg-slate-800/90 border border-slate-700/60 text-xs">
+            <button
+              type="button"
+              onClick={() => {
+                sounds?.playClick?.();
+                onLightingChange?.('daylight');
+              }}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-medium transition-all ${
+                lightingMode === 'daylight'
+                  ? 'bg-amber-500/20 text-amber-300 shadow-sm border border-amber-500/30 font-semibold'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-750'
+              }`}
+              title="Daylight mode (Clear architectural lighting)"
+            >
+              <Sun className="w-3.5 h-3.5 text-amber-400" />
+              <span>Day</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                sounds?.playClick?.();
+                onLightingChange?.('sunset');
+              }}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-medium transition-all ${
+                lightingMode === 'sunset'
+                  ? 'bg-orange-500/20 text-orange-300 shadow-sm border border-orange-500/30 font-semibold'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-750'
+              }`}
+              title="Sunset golden hour ambience"
+            >
+              <Sunset className="w-3.5 h-3.5 text-orange-400" />
+              <span>Sunset</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                sounds?.playClick?.();
+                onLightingChange?.('night');
+              }}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-medium transition-all ${
+                lightingMode === 'night'
+                  ? 'bg-indigo-500/20 text-indigo-300 shadow-sm border border-indigo-500/30 font-semibold'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-750'
+              }`}
+              title="Night studio ambience"
+            >
+              <Moon className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Night</span>
+            </button>
+          </div>
 
-        {/* Interactive Whiteboard quick launcher */}
-        {onOpenWhiteboard && (
+          {/* Action Pills: Whiteboard & Broadcast */}
           <button
             type="button"
-            className="topbar-action-btn"
-            onClick={onOpenWhiteboard}
-            aria-label="Open Meeting Whiteboard"
+            onClick={() => {
+              sounds?.playButtonClick?.();
+              onOpenWhiteboard?.();
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-750 hover:border-slate-600 border border-slate-700/60 text-xs font-semibold text-slate-200 hover:text-white transition-all shadow-sm active:scale-95"
             title="Open Collaborative Whiteboard"
           >
-            <span>✏️</span>
-            <span className="action-label">Whiteboard</span>
+            <PenTool className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Whiteboard</span>
           </button>
-        )}
 
-        {/* Screen Broadcast quick launcher */}
-        {onOpenBroadcast && (
           <button
             type="button"
-            className="topbar-action-btn"
-            onClick={onOpenBroadcast}
-            aria-label="Broadcast Screen"
-            title="Broadcast Screen to Presentation Zone"
+            onClick={() => {
+              sounds?.playButtonClick?.();
+              onOpenBroadcast?.();
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-750 hover:border-slate-600 border border-slate-700/60 text-xs font-semibold text-slate-200 hover:text-white transition-all shadow-sm active:scale-95"
+            title="Broadcast Audio & Screen to All Rooms"
           >
-            <span>📡</span>
-            <span className="action-label">Broadcast</span>
+            <Radio className="w-3.5 h-3.5 text-purple-400" />
+            <span>Broadcast</span>
           </button>
-        )}
-
-        <span className="topbar-divider" />
-
-        {/* Live WebRTC Mesh Latency Indicator */}
-        <div className="connection-pill" title="Latency: <18ms (Optimal WebRTC Mesh)">
-          <span className="live-ping-dot" />
-          <span className="latency-text">&lt;18ms WebRTC Mesh</span>
-          <svg className="signal-bars" width="14" height="11" viewBox="0 0 16 12" fill="none">
-            <rect x="1" y="9" width="2" height="3" rx="0.5" fill="#10b981" />
-            <rect x="5" y="6" width="2" height="6" rx="0.5" fill="#10b981" />
-            <rect x="9" y="3" width="2" height="9" rx="0.5" fill="#10b981" />
-            <rect x="13" y="0.5" width="2" height="11.5" rx="0.5" fill="#10b981" />
-          </svg>
         </div>
 
-        {/* Teammates Live Avatar Stack */}
-        <div
-          className="header-avatar-stack"
-          onClick={onToggleParticipants}
-          title={`View all ${participantCount} coworkers`}
-        >
-          <div className="tiny-avatar-circle t1">
-            <img src="/avatar_mia.png" alt="Mia" onError={(e) => { e.target.style.display = 'none'; }} />
+        {/* Right Section: WebRTC badge, Avatar stack, Bell, Cog, Leave Desk */}
+        <div className="flex items-center gap-2.5">
+          {/* WebRTC Connection Badge */}
+          <div
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 text-[11px] font-mono tracking-tight shadow-sm"
+            title="Peer-to-Peer WebRTC Audio Mesh Active"
+          >
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+            </span>
+            <Signal className="w-3 h-3 text-emerald-400 hidden sm:inline" />
+            <span className="font-medium hidden sm:inline">{connectionStatus}</span>
+            <span className="font-medium sm:hidden">&lt;18ms</span>
           </div>
-          <div className="tiny-avatar-circle t2">
-            <img src="/avatar_alex.png" alt="Alex" onError={(e) => { e.target.style.display = 'none'; }} />
+
+          {/* Active Users Avatar Stack with +2 Count Badge */}
+          <div
+            className="relative flex items-center cursor-pointer"
+            onClick={onToggleParticipants}
+            onMouseEnter={() => setShowUserTooltip(true)}
+            onMouseLeave={() => setShowUserTooltip(false)}
+            title="View participants"
+          >
+            <div className="flex -space-x-2 overflow-hidden items-center p-0.5">
+              {activeAvatars.slice(0, 3).map((u, i) => (
+                <div
+                  key={u.id}
+                  className={`inline-block h-6 w-6 rounded-full ring-2 ring-slate-900 overflow-hidden shadow-sm ${u.bg} flex items-center justify-center text-[10px] font-bold text-white`}
+                >
+                  {u.initial}
+                </div>
+              ))}
+              <div className="inline-flex h-6 w-6 rounded-full ring-2 ring-slate-900 bg-slate-800 text-slate-300 items-center justify-center text-[10px] font-bold">
+                +{Math.max(2, participantCount - 3)}
+              </div>
+            </div>
+
+            {/* Tooltip */}
+            <AnimatePresence>
+              {showUserTooltip && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 6 }}
+                  className="absolute right-0 top-8 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-[11px] text-slate-200 whitespace-nowrap shadow-xl z-50 pointer-events-none"
+                >
+                  {participantCount} Active Colleagues on Floor
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
-          <div className="tiny-avatar-circle t3">
-            <img src="/avatar_david.png" alt="David" onError={(e) => { e.target.style.display = 'none'; }} />
-          </div>
-          <span className="stack-count-badge">+{Math.max(1, participantCount - 3)}</span>
-        </div>
 
-        {/* Notification Bell */}
-        <button
-          type="button"
-          className="topbar-icon-button"
-          onClick={onToggleNotifications}
-          aria-label="Notifications"
-          title="Notifications"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-          </svg>
-          {hasUnread && <span className="notification-dot pulse-beacon" />}
-        </button>
-
-        {/* Chat Drawer Toggle */}
-        <button
-          type="button"
-          className={`topbar-icon-button ${chatOpen ? 'active' : ''}`}
-          onClick={onToggleChat}
-          aria-label="Chat messages"
-          title="Office Chat"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-          </svg>
-        </button>
-
-        <span className="topbar-divider" />
-
-        {/* Prominent Soft-Red Leave Desk / Leave Office Button */}
-        {onLeaveOffice && (
+          {/* Notification Bell */}
           <button
             type="button"
-            className="leave-desk-btn"
+            onClick={onToggleNotifications}
+            className="relative p-1.5 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800/80 border border-transparent hover:border-slate-700/60 active:scale-95 transition-all"
+            aria-label="Notifications"
+            title="Notifications"
+          >
+            <Bell className="w-4 h-4" />
+            {hasUnread && (
+              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-cyan-400 ring-2 ring-slate-900" />
+            )}
+          </button>
+
+          {/* Settings Cog */}
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            className="p-1.5 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800/80 border border-transparent hover:border-slate-700/60 active:scale-95 transition-all"
+            aria-label="Audio & Video Settings"
+            title="Audio & Video Settings"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+
+          {/* Distinct Red-Bordered Leave Desk Button */}
+          <button
+            type="button"
             onClick={onLeaveOffice}
-            aria-label="Leave office"
-            title="Leave virtual desk"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-950/40 hover:bg-red-900/60 text-red-300 hover:text-red-100 border border-red-500/40 text-xs font-semibold shadow-lg shadow-red-950/20 active:scale-95 transition-all"
+            title="Leave desk and return to lobby"
           >
-            <span>Leave Desk</span>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-              <polyline points="16 17 21 12 16 7" />
-              <line x1="21" y1="12" x2="9" y2="12" />
-            </svg>
+            <span className="hidden sm:inline">Leave Desk</span>
+            <span className="sm:hidden">Leave</span>
+            <span className="text-[11px] font-mono opacity-80">[→]</span>
           </button>
-        )}
-      </div>
+        </div>
+      </motion.div>
     </header>
   );
 }

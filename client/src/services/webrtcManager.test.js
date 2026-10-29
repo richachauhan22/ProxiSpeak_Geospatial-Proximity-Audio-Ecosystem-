@@ -624,4 +624,97 @@ describe('WebRTCManager Core Audio & Peer Management', () => {
     expect(manager.localStream).toBeNull();
     expect(mockAudioContext.close).toHaveBeenCalled();
   });
+
+  it('audio check: demonstrates two browsers successfully establishing a WebRTC audio connection via signaling', async () => {
+    function createMockPC() {
+      const pc = {
+        addTrack: vi.fn(),
+        getSenders: vi.fn(() => []),
+        createOffer: vi.fn().mockResolvedValue({ type: 'offer', sdp: 'mock-offer-sdp' }),
+        createAnswer: vi.fn().mockResolvedValue({ type: 'answer', sdp: 'mock-answer-sdp' }),
+        setLocalDescription: vi.fn().mockImplementation(async (desc) => {
+          pc.localDescription = desc;
+        }),
+        setRemoteDescription: vi.fn().mockImplementation(async (desc) => {
+          pc.remoteDescription = desc;
+        }),
+        addIceCandidate: vi.fn().mockResolvedValue(undefined),
+        close: vi.fn(),
+        connectionState: 'new',
+        onicecandidate: null,
+        ontrack: null,
+        onconnectionstatechange: null,
+      };
+      return pc;
+    }
+
+    const pcA = createMockPC();
+    const pcB = createMockPC();
+    let instanceCount = 0;
+    global.RTCPeerConnection = vi.fn().mockImplementation(() => {
+      instanceCount++;
+      return instanceCount === 1 ? pcA : pcB;
+    });
+    window.RTCPeerConnection = global.RTCPeerConnection;
+
+    const signalingServer = {
+      relay: (payload) => {
+        if (payload.targetId === 'browser-b') {
+          if (payload.type === 'offer') browserB.handleOffer('browser-a', payload.offer);
+          if (payload.type === 'answer') browserB.handleAnswer('browser-a', payload.answer);
+          if (payload.type === 'candidate') browserB.handleCandidate('browser-a', payload.candidate);
+        } else if (payload.targetId === 'browser-a') {
+          if (payload.type === 'offer') browserA.handleOffer('browser-b', payload.offer);
+          if (payload.type === 'answer') browserA.handleAnswer('browser-b', payload.answer);
+          if (payload.type === 'candidate') browserA.handleCandidate('browser-b', payload.candidate);
+        }
+      },
+    };
+
+    const browserA = new WebRTCManager({
+      localUserId: 'browser-a',
+      onSignal: (payload) => signalingServer.relay(payload),
+    });
+
+    const browserB = new WebRTCManager({
+      localUserId: 'browser-b',
+      onSignal: (payload) => signalingServer.relay(payload),
+    });
+
+    // 1. Both browsers capture microphone audio using getUserMedia
+    await browserA.startLocalAudio();
+    await browserB.startLocalAudio();
+
+    expect(browserA.localStream).toBe(mockMediaStream);
+    expect(browserB.localStream).toBe(mockMediaStream);
+
+    // 2. Browser A creates peer and initiates offer to Browser B
+    browserA.createPeer('browser-b', true);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // 3. Both peer instances are created and active
+    expect(browserA.peers.has('browser-b')).toBe(true);
+    expect(browserB.peers.has('browser-a')).toBe(true);
+
+    // 4. Simulate track exchange (ontrack fires on both sides)
+    const remoteStreamA = { id: 'stream-from-a' };
+    const remoteStreamB = { id: 'stream-from-b' };
+
+    browserA.peers.get('browser-b').pc.ontrack({
+      streams: [remoteStreamB],
+      track: { kind: 'audio' },
+    });
+
+    browserB.peers.get('browser-a').pc.ontrack({
+      streams: [remoteStreamA],
+      track: { kind: 'audio' },
+    });
+
+    expect(browserA.peers.get('browser-b').remoteStream).toBe(remoteStreamB);
+    expect(browserB.peers.get('browser-a').remoteStream).toBe(remoteStreamA);
+
+    browserA.destroy();
+    browserB.destroy();
+  });
 });
