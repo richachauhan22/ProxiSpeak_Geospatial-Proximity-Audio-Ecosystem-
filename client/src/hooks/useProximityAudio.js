@@ -1,4 +1,3 @@
-
 import { useEffect, useRef, useState } from 'react';
 
 const PROXIMITY_RADIUS = 100;
@@ -19,19 +18,21 @@ export function useProximityAudio({
 }) {
   const peerConnectionsRef = useRef(new Map());
   const localStreamRef = useRef(null);
-  const audioElementsRef = useRef(new Map());
   const pendingCandidatesRef = useRef(new Map());
   const offersInProgressRef = useRef(new Set());
   const syncNearbyRef = useRef(null);
   const latestRef = useRef({});
 
-
-   // Week 3: Web Audio API refs
+  // Web Audio API references
   const audioContextRef = useRef(null);
   const audioNodesRef = useRef(new Map());
+
   const [micStatus, setMicStatus] = useState('off');
   const [audioError, setAudioError] = useState('');
+  const [audioContextReady, setAudioContextReady] =
+    useState(false);
 
+  // Keep the latest positions and settings available to WebRTC callbacks.
   latestRef.current = {
     localUser,
     participants,
@@ -50,159 +51,191 @@ export function useProximityAudio({
 
     let disposed = false;
 
-  function closePeer(userId) {
-  const pc = peerConnectionsRef.current.get(userId);
+    // Close a peer connection and its associated audio nodes.
+    function closePeer(userId) {
+      const id = String(userId);
+      const pc = peerConnectionsRef.current.get(id);
 
-  if (pc) {
-    pc.onicecandidate = null;
-    pc.ontrack = null;
-    pc.onconnectionstatechange = null;
-    pc.close();
-    peerConnectionsRef.current.delete(userId);
-  }
+      if (pc) {
+        pc.onicecandidate = null;
+        pc.ontrack = null;
+        pc.onconnectionstatechange = null;
+        pc.close();
 
-  offersInProgressRef.current.delete(userId);
-  pendingCandidatesRef.current.delete(userId);
+        peerConnectionsRef.current.delete(id);
+      }
 
-  const nodes = audioNodesRef.current.get(userId);
+      offersInProgressRef.current.delete(id);
+      pendingCandidatesRef.current.delete(id);
 
-  if (nodes) {
-    try {
-      nodes.source.disconnect();
-      nodes.gain.disconnect();
-    } catch (error) {
-      console.warn('Audio node cleanup:', error);
+      const nodes = audioNodesRef.current.get(id);
+
+      if (nodes) {
+        try {
+          nodes.source.disconnect();
+          nodes.gain.disconnect();
+        } catch (error) {
+          console.warn('Audio node cleanup:', error);
+        }
+
+        audioNodesRef.current.delete(id);
+      }
     }
 
-    audioNodesRef.current.delete(userId);
-  }
-}
-
-
+    // Create a peer connection for a participant.
     function createPeer(userId) {
-      let pc = peerConnectionsRef.current.get(userId);
+      const id = String(userId);
+
+      let pc = peerConnectionsRef.current.get(id);
 
       if (pc) return pc;
 
       pc = new RTCPeerConnection(RTC_CONFIG);
-      peerConnectionsRef.current.set(userId, pc);
+      peerConnectionsRef.current.set(id, pc);
 
-      const stream = localStreamRef.current;
+      // Add our microphone track if it is already available.
+      const localStream = localStreamRef.current;
 
-      if (stream) {
-        stream.getAudioTracks().forEach((track) => {
-          pc.addTrack(track, stream);
+      if (localStream) {
+        localStream.getAudioTracks().forEach((track) => {
+          pc.addTrack(track, localStream);
         });
       }
 
+      // Send ICE candidates to the other participant.
       pc.onicecandidate = (event) => {
         if (event.candidate && socket.connected && !disposed) {
           socket.emit('webrtc:ice-candidate', {
-            toUserId: userId,
+            toUserId: id,
             candidate: event.candidate,
           });
         }
       };
 
-    pc.ontrack = async (event) => {
-  if (disposed) return;
+      // Receive remote audio and connect it to a GainNode.
+      pc.ontrack = async (event) => {
+        if (disposed) return;
 
-  const remoteStream = event.streams?.[0];
-  if (!remoteStream) return;
+        const remoteStream = event.streams?.[0];
 
-  try {
-    const AudioContextClass =
-      window.AudioContext || window.webkitAudioContext;
+        if (!remoteStream) return;
 
-    if (!AudioContextClass) {
-      throw new Error('Web Audio API is not supported.');
-    }
+        try {
+          const AudioContextClass =
+            window.AudioContext || window.webkitAudioContext;
 
-    if (!audioContextRef.current) {
-      audioContextRef.current = new AudioContextClass();
-    }
+          if (!AudioContextClass) {
+            throw new Error(
+              'Web Audio API is not supported in this browser.'
+            );
+          }
 
-    const audioContext = audioContextRef.current;
+          if (!audioContextRef.current) {
+            audioContextRef.current = new AudioContextClass();
+          }
 
-    let nodes = audioNodesRef.current.get(userId);
+          const audioContext = audioContextRef.current;
 
-    if (!nodes) {
-      const source =
-        audioContext.createMediaStreamSource(remoteStream);
-      const gain = audioContext.createGain();
+          // Create one audio processing chain per participant.
+          let nodes = audioNodesRef.current.get(id);
 
-      source.connect(gain);
-      gain.connect(audioContext.destination);
+          if (!nodes) {
+            const source =
+              audioContext.createMediaStreamSource(remoteStream);
 
-      nodes = { source, gain };
-      audioNodesRef.current.set(userId, nodes);
-    }
+            const gain = audioContext.createGain();
 
-    // Set the initial volume using current avatar positions.
-    const { localUser, participants } = latestRef.current;
+            // Start muted until the initial distance is calculated.
+            gain.gain.value = 0;
 
-    const participant = (participants || []).find(
-      (person) => String(person.id) === String(userId)
-    );
+            source.connect(gain);
+            gain.connect(audioContext.destination);
 
-    let volume = 0;
+            nodes = { source, gain };
+            audioNodesRef.current.set(id, nodes);
+          }
 
-    if (
-      localUser &&
-      participant &&
-      Number.isFinite(localUser.x) &&
-      Number.isFinite(localUser.y) &&
-      Number.isFinite(participant.x) &&
-      Number.isFinite(participant.y)
-    ) {
-      const dx = localUser.x - participant.x;
-      const dy = localUser.y - participant.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
+          // Calculate the initial volume from current avatar positions.
+          const current = latestRef.current;
+          const local = current.localUser;
 
-      volume = Math.max(
-        0,
-        Math.min(1, 1 - distance / PROXIMITY_RADIUS)
-      );
-    }
+          const participant = (current.participants || []).find(
+            (person) => String(person.id) === id
+          );
 
-    nodes.gain.gain.setValueAtTime(
-      volume,
-      audioContext.currentTime
-    );
+          let volume = 0;
 
-    if (audioContext.state === 'suspended') {
-      await audioContext.resume();
-    }
+          if (
+            local &&
+            participant &&
+            Number.isFinite(local.x) &&
+            Number.isFinite(local.y) &&
+            Number.isFinite(participant.x) &&
+            Number.isFinite(participant.y)
+          ) {
+            const dx = local.x - participant.x;
+            const dy = local.y - participant.y;
+            const distance = Math.hypot(dx, dy);
 
-    if (disposed) {
-      closePeer(userId);
-      return;
-    }
+            volume =
+              distance >= PROXIMITY_RADIUS
+                ? 0
+                : Math.max(
+                    0,
+                    Math.min(
+                      1,
+                      1 - distance / PROXIMITY_RADIUS
+                    )
+                  );
+          }
 
-    setAudioError('');
-  } catch (error) {
-    console.error('Web Audio setup error:', error);
-    setAudioError(
-      error?.message || 'Unable to initialize remote audio.'
-    );
-  }
-};
+          nodes.gain.gain.setValueAtTime(
+            volume,
+            audioContext.currentTime
+          );
 
+          if (audioContext.state === 'suspended') {
+            await audioContext.resume();
+          }
+
+          if (disposed) {
+            closePeer(id);
+            return;
+          }
+
+          setAudioContextReady(true);
+          setAudioError('');
+        } catch (error) {
+          console.error('Web Audio setup error:', error);
+
+          setAudioError(
+            error?.message ||
+              'Unable to initialize remote audio.'
+          );
+        }
+      };
+
+      // Clean up failed or closed peer connections.
       pc.onconnectionstatechange = () => {
         if (
           pc.connectionState === 'failed' ||
           pc.connectionState === 'closed'
         ) {
-          closePeer(userId);
+          closePeer(id);
         }
       };
 
       return pc;
     }
 
+    // Add ICE candidates received before the remote description.
     async function addPendingCandidates(userId, pc) {
-      const pending = pendingCandidatesRef.current.get(userId) || [];
-      pendingCandidatesRef.current.delete(userId);
+      const id = String(userId);
+
+      const pending =
+        pendingCandidatesRef.current.get(id) || [];
+
+      pendingCandidatesRef.current.delete(id);
 
       for (const candidate of pending) {
         try {
@@ -210,42 +243,46 @@ export function useProximityAudio({
             new RTCIceCandidate(candidate)
           );
         } catch (error) {
-          console.error('ICE candidate error:', error);
+          console.error('Pending ICE candidate error:', error);
         }
       }
     }
 
+    // Handle an incoming WebRTC offer.
     async function handleOffer({
       fromUserId,
       description,
     } = {}) {
       if (!fromUserId || !description || disposed) return;
 
-      // Ignore offers from users who are no longer nearby.
-      const nearby = latestRef.current.nearbyParticipants || [];
+      const id = String(fromUserId);
+      const nearby =
+        latestRef.current.nearbyParticipants || [];
+
       const isNearby = nearby.some(
-        (person) => String(person.id) === String(fromUserId)
+        (person) => String(person.id) === id
       );
 
       if (!isNearby) return;
 
-      const pc = createPeer(fromUserId);
+      const pc = createPeer(id);
 
       try {
         await pc.setRemoteDescription(
           new RTCSessionDescription(description)
         );
 
-        await addPendingCandidates(fromUserId, pc);
+        await addPendingCandidates(id, pc);
 
         if (disposed) return;
 
         const answer = await pc.createAnswer();
+
         await pc.setLocalDescription(answer);
 
         if (!disposed && socket.connected) {
           socket.emit('webrtc:answer', {
-            toUserId: fromUserId,
+            toUserId: id,
             description: pc.localDescription,
           });
         }
@@ -254,41 +291,45 @@ export function useProximityAudio({
       }
     }
 
+    // Handle an answer to our offer.
     async function handleAnswer({
       fromUserId,
       description,
     } = {}) {
       if (!fromUserId || !description || disposed) return;
 
-      const pc = peerConnectionsRef.current.get(fromUserId);
+      const id = String(fromUserId);
+      const pc = peerConnectionsRef.current.get(id);
 
-      if (!pc || !description) return;
+      if (!pc) return;
 
       try {
         await pc.setRemoteDescription(
           new RTCSessionDescription(description)
         );
 
-        await addPendingCandidates(fromUserId, pc);
+        await addPendingCandidates(id, pc);
       } catch (error) {
         console.error('WebRTC answer error:', error);
       }
     }
 
+    // Handle incoming ICE candidates.
     async function handleIceCandidate({
       fromUserId,
       candidate,
     } = {}) {
       if (!fromUserId || !candidate || disposed) return;
 
-      const pc = peerConnectionsRef.current.get(fromUserId);
+      const id = String(fromUserId);
+      const pc = peerConnectionsRef.current.get(id);
 
       if (!pc || !pc.remoteDescription) {
         const pending =
-          pendingCandidatesRef.current.get(fromUserId) || [];
+          pendingCandidatesRef.current.get(id) || [];
 
         pending.push(candidate);
-        pendingCandidatesRef.current.set(fromUserId, pending);
+        pendingCandidatesRef.current.set(id, pending);
         return;
       }
 
@@ -301,17 +342,20 @@ export function useProximityAudio({
       }
     }
 
+    // Remove a participant who has left.
     function handleAvatarLeft({ id } = {}) {
       if (id) {
         closePeer(id);
       }
     }
 
+    // Keep peer connections synchronized with nearby participants.
     async function syncNearby() {
       if (disposed || !localStreamRef.current) return;
 
       const currentUser = latestRef.current.localUser;
-      const nearby = latestRef.current.nearbyParticipants || [];
+      const nearby =
+        latestRef.current.nearbyParticipants || [];
 
       if (!currentUser?.id) return;
 
@@ -325,14 +369,14 @@ export function useProximityAudio({
           .map((person) => String(person.id))
       );
 
-      // Close connections to avatars that are no longer nearby.
+      // Close connections to participants who are no longer nearby.
       for (const userId of peerConnectionsRef.current.keys()) {
         if (!nearbyIds.has(String(userId))) {
           closePeer(userId);
         }
       }
 
-      // Connect to newly nearby avatars.
+      // Connect to nearby participants.
       for (const participant of nearby) {
         if (
           disposed ||
@@ -342,23 +386,23 @@ export function useProximityAudio({
           continue;
         }
 
-        const userId = participant.id;
-        const pc = createPeer(userId);
+        const id = String(participant.id);
+        const pc = createPeer(id);
 
-        // Only one side should initiate an offer.
+        // Use a consistent rule so only one participant offers.
         const shouldOffer =
-          String(currentUser.id).localeCompare(String(userId)) < 0;
+          String(currentUser.id).localeCompare(id) < 0;
 
         if (
           !shouldOffer ||
           pc.signalingState !== 'stable' ||
           pc.localDescription ||
-          offersInProgressRef.current.has(userId)
+          offersInProgressRef.current.has(id)
         ) {
           continue;
         }
 
-        offersInProgressRef.current.add(userId);
+        offersInProgressRef.current.add(id);
 
         try {
           const offer = await pc.createOffer();
@@ -369,25 +413,27 @@ export function useProximityAudio({
 
           if (!disposed && socket.connected) {
             socket.emit('webrtc:offer', {
-              toUserId: userId,
+              toUserId: id,
               description: pc.localDescription,
             });
           }
         } catch (error) {
           console.error('Nearby voice connection error:', error);
         } finally {
-          offersInProgressRef.current.delete(userId);
+          offersInProgressRef.current.delete(id);
         }
       }
     }
 
     syncNearbyRef.current = syncNearby;
 
+    // Register WebRTC signaling events.
     socket.on('webrtc:offer', handleOffer);
     socket.on('webrtc:answer', handleAnswer);
     socket.on('webrtc:ice-candidate', handleIceCandidate);
     socket.on('avatar:left', handleAvatarLeft);
 
+    // Request microphone access.
     async function startAudio() {
       try {
         if (!navigator.mediaDevices?.getUserMedia) {
@@ -396,14 +442,15 @@ export function useProximityAudio({
           );
         }
 
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-          },
-          video: false,
-        });
+        const stream =
+          await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            },
+            video: false,
+          });
 
         if (disposed) {
           stream.getTracks().forEach((track) => track.stop());
@@ -419,7 +466,7 @@ export function useProximityAudio({
         setMicStatus('ready');
         setAudioError('');
 
-        // Add microphone tracks to any existing peer connections.
+        // Add microphone tracks to existing peer connections.
         peerConnectionsRef.current.forEach((pc) => {
           const hasAudioSender = pc
             .getSenders()
@@ -449,6 +496,7 @@ export function useProximityAudio({
 
     startAudio();
 
+    // Remove event listeners and release audio resources.
     return () => {
       disposed = true;
       syncNearbyRef.current = null;
@@ -469,77 +517,112 @@ export function useProximityAudio({
       pendingCandidatesRef.current.clear();
       offersInProgressRef.current.clear();
 
-      audioElementsRef.current.forEach((audio) => {
-        audio.pause();
-        audio.srcObject = null;
-        audio.remove();
+      audioNodesRef.current.forEach((nodes) => {
+        try {
+          nodes.source.disconnect();
+          nodes.gain.disconnect();
+        } catch (error) {
+          console.warn('Audio cleanup:', error);
+        }
       });
 
-      audioElementsRef.current.clear();
+      audioNodesRef.current.clear();
 
       localStreamRef.current?.getTracks().forEach((track) => {
         track.stop();
       });
 
       localStreamRef.current = null;
+
+      const audioContext = audioContextRef.current;
+      audioContextRef.current = null;
+
+      if (audioContext && audioContext.state !== 'closed') {
+        audioContext.close().catch((error) => {
+          console.warn('AudioContext cleanup:', error);
+        });
+      }
+
+      setAudioContextReady(false);
     };
   }, [enabled, localUser?.id, socketRef]);
 
-  // Start or stop outgoing microphone audio when mute changes.
+  // Mute or unmute the outgoing microphone.
   useEffect(() => {
     localStreamRef.current?.getAudioTracks().forEach((track) => {
       track.enabled = !isMuted;
     });
   }, [isMuted]);
 
-  // Synchronize connections whenever the nearby participant list changes.
+  // Reconcile WebRTC connections when nearby users change.
   useEffect(() => {
     syncNearbyRef.current?.();
   }, [nearbyParticipants, enabled, localUser?.id]);
 
-  // Adjust incoming voice volume according to avatar distance.
- // Adjust incoming voice volume using Web Audio API.
-useEffect(() => {
-  const local = localUser;
-  const audioContext = audioContextRef.current;
+  // WEEK 3: Dynamic audio attenuation based on avatar distance.
+  useEffect(() => {
+    const audioContext = audioContextRef.current;
 
-  if (!audioContext) return;
+    if (!audioContext || !audioContextReady) return;
 
-  audioNodesRef.current.forEach((nodes, userId) => {
-    const participant = (participants || []).find(
-      (person) => String(person.id) === String(userId)
-    );
+    const local = localUser;
 
-    let volume = 0;
+    audioNodesRef.current.forEach((nodes, userId) => {
+      const participant = (participants || []).find(
+        (person) => String(person.id) === String(userId)
+      );
 
-    if (
-      local &&
-      participant &&
-      Number.isFinite(local.x) &&
-      Number.isFinite(local.y) &&
-      Number.isFinite(participant.x) &&
-      Number.isFinite(participant.y)
-    ) {
-      const dx = local.x - participant.x;
-      const dy = local.y - participant.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
+      let distance = null;
+      let volume = 0;
 
-      volume =
-        distance >= PROXIMITY_RADIUS
-          ? 0
-          : Math.max(
-              0,
-              Math.min(1, 1 - distance / PROXIMITY_RADIUS)
-            );
-    }
+      if (
+        local &&
+        participant &&
+        Number.isFinite(local.x) &&
+        Number.isFinite(local.y) &&
+        Number.isFinite(participant.x) &&
+        Number.isFinite(participant.y)
+      ) {
+        const dx = local.x - participant.x;
+        const dy = local.y - participant.y;
 
-    // Smooth volume transition instead of sudden changes.
-    nodes.gain.gain.setTargetAtTime(
-      volume,
-      audioContext.currentTime,
-      0.08
-    );
-  });
-}, [localUser, participants, nearbyParticipants]);
+        distance = Math.hypot(dx, dy);
+
+        volume =
+          distance >= PROXIMITY_RADIUS
+            ? 0
+            : Math.max(
+                0,
+                Math.min(
+                  1,
+                  1 - distance / PROXIMITY_RADIUS
+                )
+              );
+      }
+
+      console.log('ATTENUATION DEBUG:', {
+        localPosition: local
+          ? { x: local.x, y: local.y }
+          : null,
+        remotePosition: participant
+          ? { x: participant.x, y: participant.y }
+          : null,
+        distance,
+        volume,
+      });
+
+      nodes.gain.gain.setTargetAtTime(
+        volume,
+        audioContext.currentTime,
+        0.08
+      );
+    });
+  }, [
+    localUser,
+    participants,
+    nearbyParticipants,
+    audioContextReady,
+  ]);
+
   return { micStatus, audioError };
 }
