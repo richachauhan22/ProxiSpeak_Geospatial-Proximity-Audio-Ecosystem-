@@ -10,6 +10,7 @@ import BottomToolbar from './components/BottomToolbar';
 import ChatDrawer from './components/ChatDrawer';
 import ParticipantsDrawer from './components/ParticipantsDrawer';
 import MiniMapOverlay from './components/MiniMapOverlay';
+import Whiteboard from './components/Whiteboard'; // <--- WEEK 3: Whiteboard Modal
 import {
   CalendarModal,
   NotificationsModal,
@@ -49,7 +50,11 @@ function App() {
   const [joined, setJoined] = useState(
     () => window.location.pathname === '/office',
   );
-  const [localUser, setLocalUser] = useState(() => DEFAULT_LOCAL_USER);
+  const [localUser, setLocalUser] = useState(() => ({
+    ...DEFAULT_LOCAL_USER,
+    zoneId: null, // <--- WEEK 3: Track room location
+    isBroadcasting: false,
+  }));
   const [participants, setParticipants] = useState(
     () => DEFAULT_OFFICE_PARTICIPANTS,
   );
@@ -61,6 +66,8 @@ function App() {
   const [recenterCount, setRecenterCount] = useState(0);
   const [reactions, setReactions] = useState([]);
 
+  // Modals & Drawers
+  const [whiteboardOpen, setWhiteboardOpen] = useState(false); // <--- WEEK 3
   const [chatOpen, setChatOpen] = useState(false);
   const [participantsOpen, setParticipantsOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -110,7 +117,6 @@ function App() {
 
     window.clearTimeout(joinTimeoutRef.current);
     joinTimeoutRef.current = window.setTimeout(() => {
-      // Keep the existing local demo fallback if the server doesn't respond.
       setIsJoining(false);
       setJoined(true);
       setPage('office');
@@ -127,51 +133,50 @@ function App() {
     }
   }
 
-function closePeerConnection(peerId) {
-  const pc = peerConnectionsRef.current.get(peerId);
+  function closePeerConnection(peerId) {
+    const pc = peerConnectionsRef.current.get(peerId);
 
-  if (pc) {
-    pc.onicecandidate = null;
-    pc.ontrack = null;
-    pc.onconnectionstatechange = null;
-    pc.close();
-    peerConnectionsRef.current.delete(peerId);
-  }
-
-  pendingCandidatesRef.current.delete(peerId);
-
-  const nodes = spatialAudioNodesRef.current.get(peerId);
-
-  if (nodes) {
-    try {
-      nodes.source.disconnect();
-      nodes.gainNode.disconnect();
-      nodes.pannerNode.disconnect();
-    } catch (audioError) {
-      console.warn('Audio cleanup warning:', audioError);
+    if (pc) {
+      pc.onicecandidate = null;
+      pc.ontrack = null;
+      pc.onconnectionstatechange = null;
+      pc.close();
+      peerConnectionsRef.current.delete(peerId);
     }
 
-    spatialAudioNodesRef.current.delete(peerId);
+    pendingCandidatesRef.current.delete(peerId);
+
+    const nodes = spatialAudioNodesRef.current.get(peerId);
+
+    if (nodes) {
+      try {
+        nodes.source.disconnect();
+        nodes.gainNode.disconnect();
+        nodes.pannerNode.disconnect();
+      } catch (audioError) {
+        console.warn('Audio cleanup warning:', audioError);
+      }
+
+      spatialAudioNodesRef.current.delete(peerId);
+    }
+
+    const audioContext = audioContextsRef.current.get(peerId);
+
+    if (audioContext) {
+      audioContextsRef.current.delete(peerId);
+      audioContext.close().catch((audioError) => {
+        console.warn('Could not close audio context:', audioError);
+      });
+    }
+
+    const audio = remoteAudioRef.current.get(peerId);
+
+    if (audio) {
+      audio.pause();
+      audio.srcObject = null;
+      remoteAudioRef.current.delete(peerId);
+    }
   }
-
-  const audioContext = audioContextsRef.current.get(peerId);
-
-  if (audioContext) {
-    audioContextsRef.current.delete(peerId);
-    audioContext.close().catch((audioError) => {
-      console.warn('Could not close audio context:', audioError);
-    });
-  }
-
-  const audio = remoteAudioRef.current.get(peerId);
-
-  if (audio) {
-    audio.pause();
-    audio.srcObject = null;
-    remoteAudioRef.current.delete(peerId);
-  }
-}
-
 
   function closeAllPeerConnections() {
     for (const peerId of [...peerConnectionsRef.current.keys()]) {
@@ -194,7 +199,6 @@ function closePeerConnection(peerId) {
       video: false,
     });
 
-    // The user may have left the office while the permission prompt was open.
     if (!mountedRef.current || !localUserRef.current?.id) {
       stream.getTracks().forEach((track) => track.stop());
       throw new Error('You are no longer connected to the office.');
@@ -227,54 +231,47 @@ function closePeerConnection(peerId) {
       }
     };
 
-    
-pc.ontrack = async (event) => {
-  const stream = event.streams?.[0];
-  if (!stream) return;
+    pc.ontrack = async (event) => {
+      const stream = event.streams?.[0];
+      if (!stream) return;
 
-  if (spatialAudioNodesRef.current.has(peerId)) return;
+      if (spatialAudioNodesRef.current.has(peerId)) return;
 
-  try {
-    const audioContext = new AudioContext();
-    const source = audioContext.createMediaStreamSource(stream);
-    const gainNode = audioContext.createGain();
-    const pannerNode = audioContext.createStereoPanner();
+      try {
+        const audioContext = new AudioContext();
+        const source = audioContext.createMediaStreamSource(stream);
+        const gainNode = audioContext.createGain();
+        const pannerNode = audioContext.createStereoPanner();
 
-    gainNode.gain.value = 0;
-    pannerNode.pan.value = 0;
+        gainNode.gain.value = 0;
+        pannerNode.pan.value = 0;
 
-    source.connect(gainNode);
-    gainNode.connect(pannerNode);
-    pannerNode.connect(audioContext.destination);
+        source.connect(gainNode);
+        gainNode.connect(pannerNode);
+        pannerNode.connect(audioContext.destination);
 
-    audioContextsRef.current.set(peerId, audioContext);
+        audioContextsRef.current.set(peerId, audioContext);
 
-    spatialAudioNodesRef.current.set(peerId, {
-      source,
-      gainNode,
-      pannerNode,
-      stream,
-    });
+        spatialAudioNodesRef.current.set(peerId, {
+          source,
+          gainNode,
+          pannerNode,
+          stream,
+        });
 
-    if (audioContext.state === 'suspended') {
-      await audioContext.resume();
-    }
+        if (audioContext.state === 'suspended') {
+          await audioContext.resume();
+        }
 
-    setProximityMessage('Nearby voice audio is connected.');
-  } catch (error) {
-    console.error('Spatial audio setup failed:', error);
-
-    setProximityMessage(
-      'Voice connected, but audio could not start. Check microphone permissions and browser audio settings.',
-    );
-  }
-};
+        setProximityMessage('Nearby voice audio is connected.');
+      } catch (error) {
+        console.error('Spatial audio setup failed:', error);
+        setProximityMessage('Voice connected, but audio could not start.');
+      }
+    };
 
     pc.onconnectionstatechange = () => {
-      if (
-        pc.connectionState === 'failed' ||
-        pc.connectionState === 'closed'
-      ) {
+      if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
         closePeerConnection(peerId);
       }
     };
@@ -319,27 +316,16 @@ pc.ontrack = async (event) => {
 
     setProximityMessage(`${peerName} is nearby!`);
 
-    // Do not request microphone access in the local demo or before joining
-    // the server-backed office.
-    if (
-      !joined ||
-      !me?.id ||
-      !peerId ||
-      peerId === me.id ||
-      !socket?.connected
-    ) {
+    if (!joined || !me?.id || !peerId || peerId === me.id || !socket?.connected) {
       return;
     }
 
-    // Both clients receive proximity:entered. Only one should initiate.
-    // This deterministic rule prevents both clients from creating offers.
     if (String(me.id) > String(peerId)) return;
 
     try {
       const pc = getPeerConnection(peerId);
       await addLocalTracks(pc);
 
-      // Avoid creating a duplicate offer if the connection is already active.
       if (pc.signalingState !== 'stable') return;
 
       const offer = await pc.createOffer();
@@ -351,9 +337,7 @@ pc.ontrack = async (event) => {
       });
     } catch (audioError) {
       console.error('Could not start nearby voice:', audioError);
-      setProximityMessage(
-        audioError?.message || 'Could not start microphone audio.',
-      );
+      setProximityMessage(audioError?.message || 'Could not start microphone audio.');
     }
   }
 
@@ -363,13 +347,7 @@ pc.ontrack = async (event) => {
     const me = localUserRef.current;
     const socket = socketRef.current;
 
-    if (
-      !joined ||
-      !me?.id ||
-      !peerId ||
-      !description ||
-      !socket?.connected
-    ) {
+    if (!joined || !me?.id || !peerId || !description || !socket?.connected) {
       return;
     }
 
@@ -388,9 +366,7 @@ pc.ontrack = async (event) => {
       });
     } catch (audioError) {
       console.error('Could not answer voice offer:', audioError);
-      setProximityMessage(
-        audioError?.message || 'Could not answer the voice connection.',
-      );
+      setProximityMessage(audioError?.message || 'Could not answer voice connection.');
     }
   }
 
@@ -442,45 +418,58 @@ pc.ontrack = async (event) => {
   useEffect(() => {
     localUserRef.current = localUser;
   }, [localUser]);
-useEffect(() => {
-  if (!localUser) return;
 
-  const audioTimeConstant = 0.05;
+  // ==========================================
+  // WEEK 3: SPATIAL AUDIO & ACOUSTIC ZONE VOLUME ATTENUATION
+  // ==========================================
+  useEffect(() => {
+    if (!localUser) return;
 
-  for (const [peerId, nodes] of spatialAudioNodesRef.current) {
-    const remoteUser = participants.find(
-      (person) => String(person.id) === String(peerId),
-    );
+    const audioTimeConstant = 0.05;
 
-    const now = nodes.gainNode.context.currentTime;
-
-    if (!remoteUser) {
-      nodes.gainNode.gain.setTargetAtTime(
-        0,
-        now,
-        audioTimeConstant,
+    for (const [peerId, nodes] of spatialAudioNodesRef.current) {
+      const remoteUser = participants.find(
+        (person) => String(person.id) === String(peerId),
       );
-      continue;
+
+      const now = nodes.gainNode.context.currentTime;
+
+      if (!remoteUser) {
+        nodes.gainNode.gain.setTargetAtTime(0, now, audioTimeConstant);
+        continue;
+      }
+
+      // WEEK 3: Check if sound is blocked by meeting room walls
+      const myZone = localUser.zoneId || null;
+      const peerZone = remoteUser.zoneId || null;
+      let isAcousticallyIsolated = false;
+
+      // If one user is in a private room and the other is outside -> Mute
+      if (myZone !== peerZone) {
+        if (myZone !== null || peerZone !== null) {
+          isAcousticallyIsolated = true;
+        }
+      }
+
+      // If peer is broadcasting from the podium, bypass all walls!
+      if (remoteUser.isBroadcasting) {
+        isAcousticallyIsolated = false;
+      }
+
+      const settings = getSpatialAudioSettings(localUser, remoteUser);
+
+      // Apply muted state if separated by partition
+      const finalVolume = isAcousticallyIsolated
+        ? 0
+        : settings.audible
+        ? settings.volume
+        : 0;
+
+      nodes.gainNode.gain.setTargetAtTime(finalVolume, now, audioTimeConstant);
+      nodes.pannerNode.pan.setTargetAtTime(settings.pan, now, audioTimeConstant);
     }
+  }, [localUser, participants]);
 
-    const settings = getSpatialAudioSettings(
-      localUser,
-      remoteUser,
-    );
-
-    nodes.gainNode.gain.setTargetAtTime(
-      settings.audible ? settings.volume : 0,
-      now,
-      audioTimeConstant,
-    );
-
-    nodes.pannerNode.pan.setTargetAtTime(
-      settings.pan,
-      now,
-      audioTimeConstant,
-    );
-  }
-}, [localUser, participants]);
   useEffect(() => {
     const socket = socketRef.current;
     if (!socket) return undefined;
@@ -496,6 +485,8 @@ useEffect(() => {
         photoUrl: avatarUrl,
         avatarColor: user.avatarColor || avatarColor,
         ringColor: user.avatarColor || avatarColor,
+        zoneId: user.zoneId || null,
+        isBroadcasting: user.isBroadcasting || false,
       };
 
       localUserRef.current = mergedUser;
@@ -553,7 +544,13 @@ useEffect(() => {
       setParticipants((current) =>
         current.map((member) =>
           member.id === payload.id
-            ? { ...member, x: payload.x, y: payload.y }
+            ? {
+                ...member,
+                x: payload.x,
+                y: payload.y,
+                zoneId: payload.zoneId !== undefined ? payload.zoneId : member.zoneId,
+                isBroadcasting: payload.isBroadcasting !== undefined ? payload.isBroadcasting : member.isBroadcasting,
+              }
             : member,
         ),
       );
@@ -564,10 +561,28 @@ useEffect(() => {
           ...currentUser,
           x: payload.x,
           y: payload.y,
+          zoneId: payload.zoneId !== undefined ? payload.zoneId : currentUser.zoneId,
         };
         localUserRef.current = nextUser;
         setLocalUser(nextUser);
       }
+    };
+
+    // WEEK 3: Room and broadcast listeners
+    const handleZoneChange = ({ userId, zoneId }) => {
+      setParticipants((current) =>
+        current.map((p) => (p.id === userId ? { ...p, zoneId } : p)),
+      );
+    };
+
+    const handleBroadcastChange = ({ userId, isBroadcasting }) => {
+      setParticipants((current) =>
+        current.map((p) => (p.id === userId ? { ...p, isBroadcasting } : p)),
+      );
+    };
+
+    const handleEmote = ({ userId, emoji, x, y }) => {
+      handleReaction(emoji, x, y);
     };
 
     const handleError = (payload) => {
@@ -613,6 +628,9 @@ useEffect(() => {
     socket.on('avatar:joined', handleAvatarJoined);
     socket.on('avatar:left', handleAvatarLeft);
     socket.on('avatar:move', handleAvatarMove);
+    socket.on('avatar:zone_change', handleZoneChange); // <--- WEEK 3
+    socket.on('avatar:broadcast_change', handleBroadcastChange); // <--- WEEK 3
+    socket.on('avatar:emote', handleEmote); // <--- WEEK 3
     socket.on('proximity:entered', handleProximityEntered);
     socket.on('proximity:left', handleProximityLeft);
     socket.on('webrtc:offer', handleWebRTCOffer);
@@ -630,6 +648,9 @@ useEffect(() => {
       socket.off('avatar:joined', handleAvatarJoined);
       socket.off('avatar:left', handleAvatarLeft);
       socket.off('avatar:move', handleAvatarMove);
+      socket.off('avatar:zone_change', handleZoneChange);
+      socket.off('avatar:broadcast_change', handleBroadcastChange);
+      socket.off('avatar:emote', handleEmote);
       socket.off('proximity:entered', handleProximityEntered);
       socket.off('proximity:left', handleProximityLeft);
       socket.off('webrtc:offer', handleWebRTCOffer);
@@ -679,13 +700,14 @@ useEffect(() => {
       avatarColor,
       ringColor: avatarColor,
       photoUrl: avatarUrl,
+      zoneId: null,
+      isBroadcasting: false,
     };
     setLocalUser(updatedUser);
     localUserRef.current = updatedUser;
 
     const socket = socketRef.current;
     if (!socket || !socket.connected) {
-      // Demo mode: no microphone or real WebRTC connection.
       setJoined(true);
       setPage('office');
       setIsJoining(false);
@@ -708,6 +730,8 @@ useEffect(() => {
       avatarColor: avatarColor || '#2563eb',
       ringColor: avatarColor || '#2563eb',
       photoUrl: avatarUrl || '/avatar_mia.png',
+      zoneId: null,
+      isBroadcasting: false,
     };
 
     setLocalUser(demoUser);
@@ -739,6 +763,7 @@ useEffect(() => {
       ...currentUser,
       x: nextPosition.x,
       y: nextPosition.y,
+      zoneId: nextPosition.zoneId !== undefined ? nextPosition.zoneId : currentUser.zoneId,
     };
 
     localUserRef.current = nextUser;
@@ -747,7 +772,7 @@ useEffect(() => {
     setParticipants((current) =>
       current.map((member) =>
         member.id === nextUser.id
-          ? { ...member, x: nextPosition.x, y: nextPosition.y }
+          ? { ...member, x: nextPosition.x, y: nextPosition.y, zoneId: nextUser.zoneId }
           : member,
       ),
     );
@@ -757,8 +782,27 @@ useEffect(() => {
         officeId,
         x: nextPosition.x,
         y: nextPosition.y,
+        zoneId: nextUser.zoneId,
       });
     }
+  };
+
+  // WEEK 3: Handle entering/leaving rooms
+  const handleZoneChange = (zoneId, zone) => {
+    const socket = socketRef.current;
+    if (!socket?.connected) return;
+
+    if (zoneId) {
+      socket.emit('zone:enter', { zoneId });
+      setProximityMessage(`Entered: ${zone?.name || 'Meeting Room'}`);
+    } else {
+      socket.emit('zone:leave');
+      setProximityMessage('');
+    }
+
+    // Check if stepped onto the Townhall Stage Podium
+    const isPodium = zone?.type === 'broadcast';
+    socket.emit('office:broadcast', { isBroadcasting: isPodium });
   };
 
   const handleToggleMute = () => {
@@ -784,21 +828,26 @@ useEffect(() => {
     setIsVideoOn((previous) => !previous);
   };
 
-  const handleReaction = (emoji) => {
+  const handleReaction = (emoji, x, y) => {
     const id = Date.now() + Math.random();
     setReactions((previous) => [
       ...previous,
       {
         id,
         emoji,
-        x: localUser?.x || 554,
-        y: localUser?.y || 164,
+        x: x || localUser?.x || 554,
+        y: y || localUser?.y || 164,
       },
     ]);
 
     window.setTimeout(() => {
       setReactions((previous) => previous.filter((reaction) => reaction.id !== id));
     }, 2400);
+
+    // Send emote to teammates over socket
+    if (socketRef.current?.connected && !x) {
+      socketRef.current.emit('office:emote', { emoji });
+    }
   };
 
   return (
@@ -889,10 +938,17 @@ useEffect(() => {
               </div>
             )}
 
+            {/* Canvas with Week 3 Room & Interaction Handlers */}
             <OfficeCanvas
               localUser={localUser}
               participants={participants}
               onLocalMove={handleLocalMove}
+              onZoneChange={handleZoneChange}
+              onInteract={(obj) => {
+                if (obj.type === 'whiteboard') {
+                  setWhiteboardOpen(true);
+                }
+              }}
               zoom={zoomLevel}
               panX={panPosition.x}
               panY={panPosition.y}
@@ -930,13 +986,21 @@ useEffect(() => {
               onToggleVideo={handleToggleVideo}
               isMuted={isMuted}
               isVideoOn={isVideoOn}
-              onReaction={handleReaction}
+              onReaction={(emoji) => handleReaction(emoji)}
               onOpenSettings={() => setSettingsOpen(true)}
-              onOpenAddMenu={() => setToolsOpen(true)}
+              onOpenAddMenu={() => setWhiteboardOpen(true)} // Can also launch Whiteboard from toolbar!
               onToggleMiniMap={() => setMiniMapOpen((previous) => !previous)}
               onLeaveOffice={() => setLeaveConfirmOpen(true)}
               onOpenHelp={() => setHelpOpen(true)}
               miniMapOpen={miniMapOpen}
+            />
+
+            {/* WEEK 3: Real-Time Collaborative Whiteboard */}
+            <Whiteboard
+              isOpen={whiteboardOpen}
+              onClose={() => setWhiteboardOpen(false)}
+              socket={socketRef.current}
+              officeId={officeId}
             />
 
             <ChatDrawer

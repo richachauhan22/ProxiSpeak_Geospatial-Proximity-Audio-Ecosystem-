@@ -1,4 +1,5 @@
 import { CollisionEngine } from './CollisionEngine';
+import { getZoneAt } from './zones.js'; // <--- WEEK 3: Import zone helper
 
 const DEFAULT_SETTINGS = {
   avatarRadius: 18,
@@ -29,6 +30,10 @@ export class MovementController {
     };
     this.target = null;
     this.onMove = settings.onMove || (() => {});
+
+    // WEEK 3: Keep track of which room user is currently in
+    this.currentZoneId = null;
+    this.onZoneChange = settings.onZoneChange || (() => {});
   }
 
   handleKeyDown(event) {
@@ -110,8 +115,29 @@ export class MovementController {
       }
     }
 
+    // ==========================================
+    // WEEK 3: WHEN AVATAR MOVES, CHECK ROOM BOUNDARY
+    // ==========================================
     if (next.x !== currentPosition.x || next.y !== currentPosition.y) {
-      this.onMove({ x: next.x, y: next.y });
+      // 1. Check which room the avatar is standing in
+      const currentZone = getZoneAt(next.x, next.y);
+      const newZoneId = currentZone ? currentZone.id : null;
+
+      // 2. Did the avatar enter or exit a room?
+      if (newZoneId !== this.currentZoneId) {
+        this.currentZoneId = newZoneId;
+        this.onZoneChange({
+          zoneId: newZoneId,
+          zone: currentZone,
+        });
+      }
+
+      // 3. Send coordinates + zoneId
+      this.onMove({
+        x: next.x,
+        y: next.y,
+        zoneId: newZoneId,
+      });
     }
 
     return next;
