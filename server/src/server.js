@@ -67,6 +67,7 @@ function sanitizePosition(x, y) {
   };
 }
 
+// WEEK 3: Include zoneId and isBroadcasting in member roster
 function getRoomMembers(officeId) {
   const room = activeRooms.get(officeId);
   if (!room) return [];
@@ -78,7 +79,34 @@ function getRoomMembers(officeId) {
     x: member.x,
     y: member.y,
     officeId: member.officeId,
+    zoneId: member.zoneId || null,          // <--- WEEK 3
+    isBroadcasting: Boolean(member.isBroadcasting), // <--- WEEK 3
   }));
+}
+
+// ==========================================
+// WEEK 3: ACOUSTIC ZONE PROXIMITY CHECK
+// Two users can hear each other ONLY IF:
+// 1. One is on the podium broadcasting, OR
+// 2. They are within 100px AND in the same zone
+// ==========================================
+function canHearEachOther(userA, userB) {
+  // If either user is broadcasting from the podium, audio is floor-wide!
+  if (userA.isBroadcasting || userB.isBroadcasting) {
+    return true;
+  }
+
+  // If one is in a private room and the other is outside, NO audio connection
+  const zoneA = userA.zoneId || null;
+  const zoneB = userB.zoneId || null;
+  if (zoneA !== zoneB) {
+    if (zoneA !== null || zoneB !== null) {
+      return false; // Blocked by room partition!
+    }
+  }
+
+  // Normal 100px proximity check
+  return areUsersNearby(userA, userB);
 }
 
 function updateProximity(officeId) {
@@ -93,28 +121,33 @@ function updateProximity(officeId) {
       const userA = members[i];
       const userB = members[j];
 
-      if (!areUsersNearby(userA, userB)) continue;
+      // WEEK 3: Use zone-aware hearing check
+      if (!canHearEachOther(userA, userB)) continue;
 
       const pairKey = JSON.stringify([userA.id, userB.id].sort());
       currentPairs.set(pairKey, {
         userA,
         userB,
+        officeId,
       });
 
       if (!nearbyPairs.has(pairKey)) {
         io.to(userA.socketId).emit('proximity:entered', {
           userId: userB.id,
           displayName: userB.displayName,
+          zoneId: userB.zoneId,
         });
 
         io.to(userB.socketId).emit('proximity:entered', {
           userId: userA.id,
           displayName: userA.displayName,
+          zoneId: userA.zoneId,
         });
       }
     }
   }
 
+  // Handle users walking away or leaving room
   for (const [pairKey, previousPair] of nearbyPairs) {
     if (previousPair.officeId === officeId && !currentPairs.has(pairKey)) {
       io.to(previousPair.userA.socketId).emit('proximity:left', {
@@ -190,7 +223,6 @@ function detachUser(socketId) {
   const previous = activeUsers.get(socketId);
   if (!previous) return;
 
-  // Clean up user from MongoDB on disconnect
   UserLocationModel.deleteOne({ socketId }).catch(() => {});
 
   for (const [pairKey, pair] of nearbyPairs) {
@@ -244,38 +276,7 @@ app.get('/api/offices/:officeId', (_req, res) => {
   });
 });
 
-// WEEK 2 MID-PROJECT REVIEW ENDPOINT:
-// Proves MongoDB $near queries execute under 20ms
-app.get('/api/spatial-audit', async (req, res) => {
-  const officeId = req.query.officeId || config.officeId;
-  const start = performance.now();
-
-  try {
-    const results = await UserLocationModel.find({
-      officeId,
-      location: {
-        $near: {
-          $geometry: { type: 'Point', coordinates: [600, 380] },
-          $maxDistance: HEARING_RADIUS, // 100px
-        },
-      },
-    }).lean();
-
-    const duration = Number((performance.now() - start).toFixed(2));
-
-    res.json({
-      status: 'success',
-      reviewCheck: 'Spatial Audit: Under 20ms',
-      executionTimeMs: duration,
-      isUnder20ms: duration < 20,
-      hearingRadiusPx: HEARING_RADIUS,
-      totalUsersFound: results.length,
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
+// WebRTC signal relay with Week 3 Broadcast & Zone enforcement
 function relayWebRTCSignal(socket, eventName, payload, dataKey) {
   const sender = activeUsers.get(socket.id);
   if (!sender) {
@@ -291,10 +292,10 @@ function relayWebRTCSignal(socket, eventName, payload, dataKey) {
     ? [...room.values()].find((user) => user.id === recipientId)
     : null;
 
-  // Strict Week 2 Enforcement: Only forward signals if <= 100 pixels away!
-  if (!recipient || !canExchangeWebRTCSignal(sender, recipient)) {
+  // WEEK 3: Allow connection if broadcasting OR within hearing range in same zone
+  if (!recipient || !canHearEachOther(sender, recipient)) {
     socket.emit('webrtc:error', {
-      message: 'That user is not within hearing range (100px).',
+      message: 'That user is not within hearing range or is in another private room.',
     });
     return;
   }
@@ -352,6 +353,7 @@ io.on('connection', (socket) => {
       detachUser(socket.id);
     }
 
+    // WEEK 3: Added zoneId and isBroadcasting
     const user = {
       id: payload?.id || randomUUID(),
       displayName: payload.displayName.trim(),
@@ -359,6 +361,8 @@ io.on('connection', (socket) => {
       officeId,
       x: 180 + Math.random() * 260,
       y: 160 + Math.random() * 220,
+      zoneId: null,             // <--- Start in open space
+      isBroadcasting: false,    // <--- Not on podium
       socketId: socket.id,
     };
 
@@ -368,7 +372,6 @@ io.on('connection', (socket) => {
     activeUsers.set(socket.id, user);
     socket.join(officeId);
 
-    // Sync to MongoDB
     await syncAndQueryMongoNearby(user);
 
     logInfo('User joined office', {
@@ -391,7 +394,6 @@ io.on('connection', (socket) => {
     updateProximity(officeId);
   });
 
-  // When avatar moves
   socket.on('office:move', async (payload) => {
     const user = activeUsers.get(socket.id);
     if (!user) {
@@ -414,20 +416,86 @@ io.on('connection', (socket) => {
     user.x = nextPosition.x;
     user.y = nextPosition.y;
 
-    // 1. WEEK 2: Sync to MongoDB and perform $near check!
     await syncAndQueryMongoNearby(user);
-
-    // 2. Check 100px proximity pairs & trigger WebRTC handshakes
     updateProximity(officeId);
 
-    // 3. Broadcast to all users
     socket.to(officeId).emit('avatar:move', {
       id: user.id,
       displayName: user.displayName,
       avatarColor: user.avatarColor,
       x: user.x,
       y: user.y,
+      zoneId: user.zoneId,
+      isBroadcasting: user.isBroadcasting,
       officeId,
+    });
+  });
+
+  // ==========================================
+  // WEEK 3 NEW LISTENERS: ROOMS & WHITEBOARD
+  // ==========================================
+
+  // 1. User enters a room (Boardroom, Focus Pod)
+  socket.on('zone:enter', ({ zoneId }) => {
+    const user = activeUsers.get(socket.id);
+    if (!user) return;
+
+    user.zoneId = zoneId;
+    socket.to(user.officeId).emit('avatar:zone_change', {
+      userId: user.id,
+      zoneId: zoneId,
+    });
+    updateProximity(user.officeId);
+  });
+
+  // 2. User walks out of room into open space
+  socket.on('zone:leave', () => {
+    const user = activeUsers.get(socket.id);
+    if (!user) return;
+
+    user.zoneId = null;
+    socket.to(user.officeId).emit('avatar:zone_change', {
+      userId: user.id,
+      zoneId: null,
+    });
+    updateProximity(user.officeId);
+  });
+
+  // 3. User steps on Townhall Podium
+  socket.on('office:broadcast', ({ isBroadcasting }) => {
+    const user = activeUsers.get(socket.id);
+    if (!user) return;
+
+    user.isBroadcasting = Boolean(isBroadcasting);
+    io.to(user.officeId).emit('avatar:broadcast_change', {
+      userId: user.id,
+      isBroadcasting: user.isBroadcasting,
+    });
+    updateProximity(user.officeId);
+  });
+
+  // 4. Whiteboard drawing sync
+  socket.on('whiteboard:draw', (strokeData) => {
+    const user = activeUsers.get(socket.id);
+    if (!user) return;
+    socket.to(user.officeId).emit('whiteboard:draw', strokeData);
+  });
+
+  socket.on('whiteboard:clear', () => {
+    const user = activeUsers.get(socket.id);
+    if (!user) return;
+    socket.to(user.officeId).emit('whiteboard:clear');
+  });
+
+  // 5. Emoji Reaction Floaters (👏, ☕, ❤️)
+  socket.on('office:emote', ({ emoji }) => {
+    const user = activeUsers.get(socket.id);
+    if (!user) return;
+    io.to(user.officeId).emit('avatar:emote', {
+      userId: user.id,
+      emoji,
+      x: user.x,
+      y: user.y,
     });
   });
 
