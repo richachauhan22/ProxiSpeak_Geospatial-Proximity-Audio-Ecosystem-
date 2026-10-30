@@ -14,6 +14,8 @@ import {
 import { validateVisualGraphPayload } from './graphValidator.js';
 import { runIngestionAuditBenchmark, formatAuditSummary } from './telemetryIngestionAudit.js';
 import { ensureTimeSeriesCollection, SpatialTelemetryModel } from './spatialTelemetrySchema.js';
+import { RedisPubSubService } from './redisClient.js';
+import { SpatialGrid, optimizeMeshCandidates } from './meshScaler.js';
 
 export const WEBRTC_PROXIMITY_RADIUS = 100;
 
@@ -35,6 +37,48 @@ const dbState = {
 const activeUsers = new Map();
 const activeRooms = new Map();
 const activeGraphs = new Map();
+export const officeGrids = new Map();
+
+// Initialize Redis Pub/Sub multi-instance scaling service
+export const redisService = new RedisPubSubService({
+  instanceId: config.instanceId,
+  redisUrl: config.redisUrl,
+  enabled: config.redisEnabled,
+});
+
+export function getOfficeGrid(officeId) {
+  if (!officeGrids.has(officeId)) {
+    officeGrids.set(officeId, new SpatialGrid(config.meshCellSize));
+  }
+  return officeGrids.get(officeId);
+}
+
+// Subscribe to cross-node events broadcasted via Redis Pub/Sub
+redisService.on('remote_event', ({ channel, event, data, origin }) => {
+  logInfo('Received cross-node Redis event', { event, channel, origin });
+
+  if (event === 'avatar:move') {
+    io.to(data.officeId).emit('avatar:move', data);
+    getOfficeGrid(data.officeId).insertOrUpdate(data.id, data.x, data.y, data);
+  } else if (event === 'avatar:joined') {
+    io.to(data.officeId).emit('avatar:joined', data);
+    getOfficeGrid(data.officeId).insertOrUpdate(data.id, data.x, data.y, data);
+  } else if (event === 'avatar:left') {
+    io.to(data.officeId).emit('avatar:left', data);
+    getOfficeGrid(data.officeId).remove(data.id);
+  } else if (
+    event === 'webrtc:offer' ||
+    event === 'webrtc:answer' ||
+    event === 'webrtc:ice-candidate'
+  ) {
+    const target = [...activeUsers.values()].find(
+      (u) => u.id === data.targetId || u.socketId === data.targetId
+    );
+    if (target) {
+      io.to(target.socketId).emit(event, data.payload);
+    }
+  }
+});
 
 const avatarSize = 18;
 
@@ -188,6 +232,7 @@ function detachUser(socketId) {
   }
 
   removeUserLocation(previous.officeId, previous.id);
+  getOfficeGrid(previous.officeId).remove(previous.id);
 
   const room = activeRooms.get(previous.officeId);
 
@@ -197,6 +242,11 @@ function detachUser(socketId) {
       activeRooms.delete(previous.officeId);
     } else {
       io.to(previous.officeId).emit('avatar:left', {
+        id: previous.id,
+        officeId: previous.officeId,
+      });
+      // Broadcast departure across Node instances
+      redisService.publishEvent(`proxispeak:room:${previous.officeId}`, 'avatar:left', {
         id: previous.id,
         officeId: previous.officeId,
       });
@@ -355,6 +405,50 @@ app.get('/api/telemetry/audit', async (req, res) => {
   });
 });
 
+// Mesh Scaling & Redis Status Endpoint
+app.get('/api/mesh/status', (_req, res) => {
+  res.json({
+    status: 'ok',
+    instanceId: config.instanceId,
+    timestamp: new Date().toISOString(),
+    redis: redisService.getStatus(),
+    meshScaling: {
+      cellSize: config.meshCellSize,
+      maxMeshPeers: config.maxMeshPeers,
+      proximityRadius: WEBRTC_PROXIMITY_RADIUS,
+    },
+    localMetrics: {
+      activeUsers: activeUsers.size,
+      activeRooms: activeRooms.size,
+      grids: officeGrids.size,
+    },
+  });
+});
+
+// Fast O(1) Spatial Grid Query for Optimized Mesh Candidates
+app.get('/api/offices/:officeId/mesh/candidates', (req, res) => {
+  const officeId = req.params.officeId || config.officeId;
+  const x = Number(req.query.x || 0);
+  const y = Number(req.query.y || 0);
+  const radius = Number(req.query.radius || WEBRTC_PROXIMITY_RADIUS);
+  const maxDegree = Number(req.query.maxDegree || config.maxMeshPeers);
+  const userId = req.query.userId || null;
+
+  const grid = getOfficeGrid(officeId);
+  const rawNeighbors = grid.queryNeighbors(x, y, radius, userId);
+  const optimized = optimizeMeshCandidates({ id: userId, x, y }, rawNeighbors, maxDegree);
+
+  res.json({
+    officeId,
+    center: { x, y },
+    radius,
+    maxDegree,
+    rawNeighborCount: rawNeighbors.length,
+    optimizedCount: optimized.length,
+    candidates: optimized,
+  });
+});
+
 io.on('connection', (socket) => {
   logInfo('Client connected', { socketId: socket.id });
   socket.emit('connection', {
@@ -400,6 +494,14 @@ io.on('connection', (socket) => {
     // Sync to MongoDB for $near geospatial indexing
     syncUserLocation(user);
 
+    // Register in spatial grid and subscribe to room's Redis Pub/Sub channel
+    getOfficeGrid(officeId).insertOrUpdate(user.id, user.x, user.y, user);
+    redisService.subscribeChannel(`proxispeak:room:${officeId}`);
+    redisService.subscribeChannel('proxispeak:signaling');
+
+    // Broadcast across Node instances via Redis Pub/Sub
+    redisService.publishEvent(`proxispeak:room:${officeId}`, 'avatar:joined', user);
+
     logInfo('User joined office', {
       socketId: socket.id,
       officeId,
@@ -441,17 +543,25 @@ io.on('connection', (socket) => {
     user.x = nextPosition.x;
     user.y = nextPosition.y;
 
+    // Update spatial grid partition for O(1) proximity lookups
+    getOfficeGrid(officeId).insertOrUpdate(user.id, user.x, user.y, user);
+
     // Sync position update to MongoDB
     syncUserLocation(user);
 
-    socket.to(officeId).emit('avatar:move', {
+    const movePayload = {
       id: user.id,
       displayName: user.displayName,
       avatarColor: user.avatarColor,
       x: user.x,
       y: user.y,
       officeId,
-    });
+    };
+
+    socket.to(officeId).emit('avatar:move', movePayload);
+
+    // Broadcast movement across Node instances via Redis Pub/Sub
+    redisService.publishEvent(`proxispeak:room:${officeId}`, 'avatar:move', movePayload);
   });
 
   socket.on('office:nearby', async (payload, callback) => {
@@ -500,36 +610,46 @@ io.on('connection', (socket) => {
     socket.emit('office:left', { officeId: targetOfficeId });
   });
 
-  // Week 2: Logic to only send WebRTC offer/answers to users within a 100-pixel radius
+  // Logic to only send WebRTC offer/answers to users within a 100-pixel radius & route across instances
   socket.on('webrtc:offer', (payload) => {
     const user = activeUsers.get(socket.id);
     if (!user) return;
     const targetId = payload?.targetId;
     const target = [...activeUsers.values()].find((u) => u.id === targetId || u.socketId === targetId);
-    if (!target) return;
 
-    // Calculate 2D Euclidean distance
-    const distance = Math.hypot(user.x - target.x, user.y - target.y);
-    if (distance > WEBRTC_PROXIMITY_RADIUS) {
-      logInfo('WebRTC offer suppressed: target outside 100px radius', {
+    if (target) {
+      // Calculate 2D Euclidean distance
+      const distance = Math.hypot(user.x - target.x, user.y - target.y);
+      if (distance > WEBRTC_PROXIMITY_RADIUS) {
+        logInfo('WebRTC offer suppressed: target outside 100px radius', {
+          senderId: user.id,
+          targetId: target.id,
+          distance: Number(distance.toFixed(2)),
+          limit: WEBRTC_PROXIMITY_RADIUS,
+        });
+        socket.emit('webrtc:proximity-error', {
+          type: 'offer_rejected',
+          targetId: target.id,
+          distance: Number(distance.toFixed(2)),
+          message: 'Cannot send WebRTC offer: peer is outside the 100-pixel proximity radius.',
+        });
+        return;
+      }
+
+      io.to(target.socketId).emit('webrtc:offer', {
         senderId: user.id,
-        targetId: target.id,
-        distance: Number(distance.toFixed(2)),
-        limit: WEBRTC_PROXIMITY_RADIUS,
+        offer: payload.offer,
       });
-      socket.emit('webrtc:proximity-error', {
-        type: 'offer_rejected',
-        targetId: target.id,
-        distance: Number(distance.toFixed(2)),
-        message: 'Cannot send WebRTC offer: peer is outside the 100-pixel proximity radius.',
+    } else {
+      // Cross-node WebRTC offer routing via Redis Pub/Sub
+      redisService.publishEvent('proxispeak:signaling', 'webrtc:offer', {
+        targetId,
+        payload: {
+          senderId: user.id,
+          offer: payload.offer,
+        },
       });
-      return;
     }
-
-    io.to(target.socketId).emit('webrtc:offer', {
-      senderId: user.id,
-      offer: payload.offer,
-    });
   });
 
   socket.on('webrtc:answer', (payload) => {
@@ -537,30 +657,40 @@ io.on('connection', (socket) => {
     if (!user) return;
     const targetId = payload?.targetId;
     const target = [...activeUsers.values()].find((u) => u.id === targetId || u.socketId === targetId);
-    if (!target) return;
 
-    // Calculate 2D Euclidean distance
-    const distance = Math.hypot(user.x - target.x, user.y - target.y);
-    if (distance > WEBRTC_PROXIMITY_RADIUS) {
-      logInfo('WebRTC answer suppressed: target outside 100px radius', {
+    if (target) {
+      // Calculate 2D Euclidean distance
+      const distance = Math.hypot(user.x - target.x, user.y - target.y);
+      if (distance > WEBRTC_PROXIMITY_RADIUS) {
+        logInfo('WebRTC answer suppressed: target outside 100px radius', {
+          senderId: user.id,
+          targetId: target.id,
+          distance: Number(distance.toFixed(2)),
+          limit: WEBRTC_PROXIMITY_RADIUS,
+        });
+        socket.emit('webrtc:proximity-error', {
+          type: 'answer_rejected',
+          targetId: target.id,
+          distance: Number(distance.toFixed(2)),
+          message: 'Cannot send WebRTC answer: peer is outside the 100-pixel proximity radius.',
+        });
+        return;
+      }
+
+      io.to(target.socketId).emit('webrtc:answer', {
         senderId: user.id,
-        targetId: target.id,
-        distance: Number(distance.toFixed(2)),
-        limit: WEBRTC_PROXIMITY_RADIUS,
+        answer: payload.answer,
       });
-      socket.emit('webrtc:proximity-error', {
-        type: 'answer_rejected',
-        targetId: target.id,
-        distance: Number(distance.toFixed(2)),
-        message: 'Cannot send WebRTC answer: peer is outside the 100-pixel proximity radius.',
+    } else {
+      // Cross-node WebRTC answer routing via Redis Pub/Sub
+      redisService.publishEvent('proxispeak:signaling', 'webrtc:answer', {
+        targetId,
+        payload: {
+          senderId: user.id,
+          answer: payload.answer,
+        },
       });
-      return;
     }
-
-    io.to(target.socketId).emit('webrtc:answer', {
-      senderId: user.id,
-      answer: payload.answer,
-    });
   });
 
   socket.on('webrtc:ice-candidate', (payload) => {
@@ -568,18 +698,27 @@ io.on('connection', (socket) => {
     if (!user) return;
     const targetId = payload?.targetId;
     const target = [...activeUsers.values()].find((u) => u.id === targetId || u.socketId === targetId);
-    if (!target) return;
 
-    // Only relay ICE candidates if peers are within proximity radius
-    const distance = Math.hypot(user.x - target.x, user.y - target.y);
-    if (distance > WEBRTC_PROXIMITY_RADIUS) {
-      return;
+    if (target) {
+      const distance = Math.hypot(user.x - target.x, user.y - target.y);
+      if (distance > WEBRTC_PROXIMITY_RADIUS) {
+        return;
+      }
+
+      io.to(target.socketId).emit('webrtc:ice-candidate', {
+        senderId: user.id,
+        candidate: payload.candidate,
+      });
+    } else {
+      // Cross-node ICE candidate routing via Redis Pub/Sub
+      redisService.publishEvent('proxispeak:signaling', 'webrtc:ice-candidate', {
+        targetId,
+        payload: {
+          senderId: user.id,
+          candidate: payload.candidate,
+        },
+      });
     }
-
-    io.to(target.socketId).emit('webrtc:ice-candidate', {
-      senderId: user.id,
-      candidate: payload.candidate,
-    });
   });
 
   socket.on('disconnect', () => {
@@ -617,4 +756,4 @@ async function startServer() {
 
 startServer();
 
-export { app, io, activeUsers, activeRooms, activeGraphs };
+export { app, io, activeUsers, activeRooms, activeGraphs, officeGrids, redisService };
