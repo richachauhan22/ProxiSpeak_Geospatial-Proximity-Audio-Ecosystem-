@@ -12,6 +12,7 @@ import {
   Maximize,
   Minimize,
   Smile,
+  Radio,
 } from 'lucide-react';
 import { sounds } from '../services/soundEffects';
 
@@ -337,6 +338,24 @@ export default function BottomToolbar({
           transition={{ duration: 0.4 }}
           className="pointer-events-auto flex items-center gap-1.5 px-2.5 py-2 rounded-2xl bg-slate-900/85 backdrop-blur-md border border-slate-700/60 text-slate-100 shadow-2xl"
         >
+          {/* Mini-map Toggle (Radar Icon) */}
+          <button
+            type="button"
+            onClick={() => {
+              sounds?.playClick?.();
+              if (onToggleMiniMap) onToggleMiniMap();
+            }}
+            className={`p-1.5 rounded-xl border transition-all active:scale-95 ${
+              miniMapOpen
+                ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 shadow-sm shadow-cyan-500/20'
+                : 'text-slate-400 hover:text-cyan-300 hover:bg-slate-800 border-transparent hover:border-slate-700/50'
+            }`}
+            title="Toggle floor radar mini-map (M)"
+            aria-label="Mini-map radar"
+          >
+            <Radio className="w-4 h-4" />
+          </button>
+
           {/* Recenter Button (Crosshair Icon) */}
           <button
             type="button"

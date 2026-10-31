@@ -2,52 +2,69 @@
 
 ProxiSpeak is a spatial audio and collaborative virtual office platform modeled after proximity-based workspace experiences (such as oVice and Gather). Users navigate as customizable 2D avatars in a shared virtual workspace with real-time positional broadcasting, collision detection, and proximity audio cues.
 
-## 🚀 Development Milestones Completed
+---
 
-### 🎙️ WebRTC Peer-to-Peer Spatial Audio (`/client` & `/server`)
+## 🚀 Core Architectural Milestones
+
+### 🎧 Dynamic Attenuation & Web Audio API Integration
+ProxiSpeak hooks incoming WebRTC peer audio streams directly into the browser's **Web Audio API** graph to dynamically spatialize sound based on relative avatar pixel coordinates.
+
+- **4 Configurable Volume Drop-Off Algorithms**:
+  1. **Linear**: Constant slope attenuation from core boundary ($d_{\min}$) to silence boundary ($d_{\max}$):
+     $$V(d) = 1.0 - \frac{d - d_{\min}}{d_{\max} - d_{\min}}$$
+  2. **Exponential**: Models human logarithmic decibel hearing sensation (Weber-Fechner response):
+     $$t = \frac{d - d_{\min}}{d_{\max} - d_{\min}}, \quad V(t) = \frac{e^{-\alpha \cdot t} - e^{-\alpha}}{1 - e^{-\alpha}}$$
+  3. **Inverse Distance**: Models physical 3D acoustic wave pressure dispersion ($1/r$):
+     $$V(t) = \frac{\frac{1}{1 + \gamma \cdot t} - \frac{1}{1 + \gamma}}{1 - \frac{1}{1 + \gamma}}$$
+  4. **Smoothstep S-Curve**: Cubic Hermite interpolation ($1 - (3t^2 - 2t^3)$) eliminating harsh slope discontinuities at boundaries.
+- **Acoustic Air Damping (`BiquadFilterNode`)**: High frequencies absorb faster over distance. A lowpass filter sweeps smoothly from 20,000 Hz down to 1,000 Hz as distance increases.
+- **Directional Stereo Panning (`StereoPannerNode`)**: Positions colleagues in left/right channels based on horizontal $\Delta x$ offset.
+- **Obstacle & Partition Occlusion**: Raycasting algorithm detects cubicle partition walls between avatars and applies muffling and lowpass filtration.
+- **Interactive Audio HUD & Settings**: Live SVG curve scrubbers in [`SettingsModal.jsx`](client/src/components/OfficeModals.jsx) and dynamic decibel meters in [`BottomToolbar.jsx`](client/src/components/BottomToolbar.jsx).
+- *Comprehensive Guide*: See [**`docs/WEBRTC_AUDIO.md`**](docs/WEBRTC_AUDIO.md).
+
+---
+
+### 🌐 WebRTC Mesh Scaling & Redis Pub/Sub (`/server`)
+To scale beyond a single Node.js instance and prevent $O(N^2)$ mesh connection degradation, ProxiSpeak features multi-instance horizontal scaling and spatial grid partitioning.
+
+- **Redis Pub/Sub Horizontal Scaling ([`server/src/redisClient.js`](server/src/redisClient.js))**:
+  - Implements `SimpleRedisClient` and `RedisPubSubService` using pure Node.js TCP sockets and zero external dependencies.
+  - Relays Socket.io signaling (`webrtc:offer`, `webrtc:answer`, `webrtc:ice-candidate`) across multiple Node server instances.
+  - Synchronizes world state (`avatar:move`, `avatar:joined`, `avatar:left`) globally.
+  - Automatically falls back to an in-memory event bus if running without Redis.
+- **Spatial Grid Partitioning ([`server/src/meshScaler.js`](server/src/meshScaler.js))**:
+  - Divides the 2D plane into grid cells for $\mathcal{O}(1)$ neighbor lookups.
+  - Queries only the 9-cell bounding box when looking up candidates within the 100px proximity radius.
+- **Mesh Degree Optimization ([`optimizeMeshCandidates`](server/src/meshScaler.js))**:
+  - Enforces a degree cap (`maxMeshPeers = 8`) to preserve client CPU and network bandwidth.
+  - Heuristically prioritizes pinned private links, active speakers, and closest Euclidean distance.
+- *Comprehensive Guide*: See [**`docs/MESH_SCALING_AND_REDIS.md`**](docs/MESH_SCALING_AND_REDIS.md).
+
+---
+
+### 🎙️ WebRTC Peer-to-Peer Pipeline (`/client`)
 - **Browser Audio Capture (`getUserMedia`)**:
-  - Direct microphone stream capture with active echo cancellation, noise suppression, and automatic gain control.
   - Granular hardware track mute/unmute control (`track.enabled = !isMuted`).
-  - Audio device enumeration and selection with permission state handling (`granted`, `denied`, `unsupported`).
-- **Standard WebRTC P2P Mesh (`RTCPeerConnection`)**:
-  - Peer connection management with standard STUN server failovers (`stun.l.google.com:19302`).
-  - Deterministic offer/answer exchange to eliminate glare.
-  - Queued ICE candidate buffering and resolution.
-- **Socket.io Signaling Relay**:
-  - Bidirectional relay for `webrtc:offer`, `webrtc:answer`, and `webrtc:ice-candidate` routed by user ID.
+  - Device enumeration, permission state management (`prompt`, `granted`, `denied`, `unsupported`).
+- **Deterministic Glare-Free Signaling**:
+  - Lexicographical ID comparison (`localUserId < remoteUserId`) determines initiator/receiver roles.
+  - Buffering and resolution of early-arriving ICE candidates.
 - **Voice Activity Detection (VAD)**:
-  - Real-time client-side volume analysis using Web Audio API's `AudioContext` and `AnalyserNode`.
-  - Visual indicators: animated green equalizer waves on the bottom dock and voice activity halos on avatars.
-- **2D Spatial Audio Falloff & Stereo Panning**:
-  - Distance attenuation using `GainNode`: full volume within 60px, smooth linear falloff up to 280px (configurable up to 400px).
-  - Directional stereo panning using `StereoPannerNode` ($[-1, 1]$) based on horizontal coordinate offset.
-  - *Detailed architectural reference*: See [**`docs/WEBRTC_AUDIO.md`**](docs/WEBRTC_AUDIO.md).
+  - Real-time client-side FFT analysis via `AnalyserNode`.
+  - Animates talking voice arcs around avatars and green audio waves in the toolbar.
+- **Strict 100px Proximity Gating**:
+  - Connections automatically spawn when peers enter $\le 100\text{ px}$.
+  - Connections cleanly tear down beyond $100\text{ px}$ to conserve resources.
 
-### Backend (`/server`)
-- **Node.js, Express & Socket.io Signaling Engine**:
-  - `office:join`: Authenticates user join requests, assigns spawn locations, and delivers active room rosters.
-  - `office:move`: Sanitizes, bounds-checks, and broadcasts real-time avatar `(x, y)` coordinate updates across all connected room participants.
-  - `office:leave` & `disconnect`: Handles graceful participant departure and broadcasts presence removals.
-  - `webrtc:*`: Targeted signaling exchange between office participants, strictly gated by 100-pixel proximity.
-- **MongoDB Geospatial Schemas & $near Queries**:
-  - Mongoose `UserLocationModel` with dual `2d` (Cartesian Euclidean plane) and `2dsphere` (GeoJSON) geospatial indexes.
-  - MongoDB `$near` query integration to find nearby colleagues (`GET /api/offices/:officeId/nearby`).
-  - Proximity clustering algorithm to group office members into conversation clusters (`GET /api/offices/:officeId/groups`).
-  - Strict 100-pixel proximity radius logic: WebRTC offer/answer signaling is only permitted between users within a 100-pixel distance.
+---
 
-### Frontend (`/client`)
-- **100-Pixel WebRTC Proximity Handshake**:
-  - Automatically initiates peer connections and exchanges WebRTC offers/answers when avatars enter the 100-pixel proximity radius.
-  - Gracefully terminates peer connections when avatars move beyond the 100-pixel radius.
-- **React Canvas Layer**:
-  - High-performance HTML5 Canvas renderer handling high-DPI scaling, smooth animation loops (`requestAnimationFrame`), dynamic panning, and zooming.
-- **Movement & Collision Controller**:
-  - Smooth 8-directional keyboard navigation (Arrow keys & WASD).
-  - Click-to-move pointer pathing with obstacle collision avoidance.
-  - Coordinate broadcasting throttled at 60ms intervals for responsive real-time multiplayer updates.
-- **Proximity Audio & UI Controls**:
-  - Distance threshold triggers chime effects when avatars enter proximity interaction ranges.
-  - Modern bottom dock with audio controls, mini-map radar overlay, device settings modal, and participant drawer.
+### 🗄️ Backend Geospatial & Telemetry (`/server`)
+- **MongoDB Geospatial Indexing**:
+  - Dual `2d` Euclidean flat Cartesian index and `2dsphere` GeoJSON index.
+  - `$near` queries (`GET /api/offices/:officeId/nearby`) and proximity clustering (`GET /api/offices/:officeId/groups`).
+- **High-Speed Time-Series Telemetry**:
+  - MongoDB Time-Series collection schema benchmarking up to 5,000 spatial writes/sec.
 
 ---
 
@@ -55,20 +72,26 @@ ProxiSpeak is a spatial audio and collaborative virtual office platform modeled 
 
 ```
 PROXISPEAK/
-├── docs/                       # Technical architecture & WebRTC documentation
-│   └── WEBRTC_AUDIO.md         # WebRTC P2P audio, signaling, and spatial math guide
+├── docs/                       # Comprehensive Architecture & Technical Guides
+│   ├── WEBRTC_AUDIO.md         # WebRTC P2P audio, Web Audio graph, and spatial attenuation math
+│   ├── MESH_SCALING_AND_REDIS.md# Redis Pub/Sub, multi-node scaling, and spatial grid hashing
+│   └── WEEK_WISE_APP_INFO.md   # Chronological development roadmap and milestone breakdown
 ├── client/                     # Vite + React Canvas Frontend
-│   ├── public/                 # Avatars and office layout maps
+│   ├── public/                 # Avatars and office layout assets
 │   ├── src/
-│   │   ├── components/         # Navigation, toolbar, drawers, and modal UI
+│   │   ├── components/         # Toolbar, radar mini-map, drawers, and audio modals
 │   │   ├── hooks/              # Custom React hooks (useWebRTC, useSocket)
 │   │   ├── office/             # Canvas rendering, collision engine, and movement controller
 │   │   ├── pages/              # Landing and Join office views
-│   │   └── services/           # WebRTCManager, Socket.io client & Web Audio chimes
+│   │   └── services/           # WebRTCManager, SocketClient, and SoundEffects
 ├── server/                     # Express & Socket.io Backend
 │   ├── src/
-│   │   ├── config.js           # Server configuration & environment defaults
-│   │   ├── officeSchema.js     # MongoDB geospatial schema with 2dsphere index
+│   │   ├── config.js           # Multi-node, Redis, and mesh scaling environment settings
+│   │   ├── redisClient.js      # Pure Node.js Redis Pub/Sub client & RESP parser
+│   │   ├── meshScaler.js       # SpatialGrid O(1) hashing & mesh candidate optimizer
+│   │   ├── officeSchema.js     # MongoDB geospatial schemas
+│   │   ├── graphValidator.js   # Topology graph validator
+│   │   ├── telemetryIngestionAudit.js # 5,000 writes/sec stress audit suite
 │   │   └── server.js           # Express app & Socket.io signaling server
 └── package.json                # Monorepo workspace configuration
 ```
@@ -80,6 +103,7 @@ PROXISPEAK/
 ### Prerequisites
 - Node.js 18+
 - npm 9+
+- (Optional) Redis running on `redis://127.0.0.1:6379`
 - (Optional) MongoDB running on `mongodb://127.0.0.1:27017/proxispeak`
 
 ### Installation
@@ -88,10 +112,11 @@ npm install
 ```
 
 ### Running Locally
-Run both client and server in development mode:
+Run both client and server concurrently in development mode:
 ```bash
 npm run dev
 ```
+
 Or start each service individually:
 ```bash
 # Start Backend (Port 4000)
@@ -101,8 +126,32 @@ npm run dev --workspace server
 npm run dev --workspace client
 ```
 
-### Running Tests
-Execute unit and component tests:
+### Running Multi-Node Server Instances
+To test Redis Pub/Sub horizontal scaling across two Node instances:
+```bash
+# Instance 1 (Port 4000)
+PORT=4000 NODE_INSTANCE_ID=node-1 REDIS_URL=redis://127.0.0.1:6379 npm run dev --workspace server
+
+# Instance 2 (Port 4001)
+PORT=4001 NODE_INSTANCE_ID=node-2 REDIS_URL=redis://127.0.0.1:6379 npm run dev --workspace server
+```
+
+---
+
+## 🧪 Testing & Verification
+
+Execute the complete automated test suite (121 tests across 12 test files):
 ```bash
 npm test
 ```
+
+### Test Coverage Highlights:
+- **Client (80 tests)**:
+  - `webrtcManager.test.js`: Web Audio graph connection, attenuation math, pan clamping, mute/unmute, and candidate buffering.
+  - `useWebRTC.test.js`: 100px proximity gating, lifecycle management, and permission states.
+  - `OfficeModals.test.jsx`, `BottomToolbar.test.jsx`, `MovementController.test.js`, `visualGraphSerializer.test.js`.
+- **Server (41 tests)**:
+  - `redisClient.test.js`: RESP encoder/parser, publish/subscribe routing, and echo suppression.
+  - `meshScaler.test.js`: Spatial grid coordinate hashing and active speaker candidate pruning.
+  - `server.test.js`: Signaling routing, proximity gating, and REST endpoints.
+  - `graphValidator.test.js` & `telemetryIngestionAudit.test.js`.

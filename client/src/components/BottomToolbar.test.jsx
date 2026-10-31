@@ -112,7 +112,7 @@ describe('BottomToolbar Component', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /recenter on your avatar/i }));
+    fireEvent.click(screen.getByRole('button', { name: /recenter camera/i }));
     expect(handleRecenter).toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: /mini-map radar/i }));
