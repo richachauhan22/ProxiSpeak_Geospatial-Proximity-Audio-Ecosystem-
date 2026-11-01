@@ -222,6 +222,18 @@ describe('Frontend Visual Graph Serialization Pipeline', () => {
     expect(calculateStereoPan(100, 380)).toBe(1.0); // +280px -> right
     expect(calculateStereoPan(380, 100)).toBe(-1.0); // -280px -> left
     expect(calculateStereoPan(100, 600)).toBe(1.0); // clamped to 1.0
+
+    // 3D stereo panning with depth and stereo separation
+    expect(calculateStereoPan(100, 100, 100, 200)).toBe(0.0); // centered ahead
+    const right3D = calculateStereoPan(100, 240, 100, 150, 1.0);
+    expect(right3D).toBeGreaterThan(0.5);
+    expect(right3D).toBeLessThanOrEqual(1.0);
+
+    const mono = calculateStereoPan(100, 240, 100, 150, 0.0);
+    expect(mono).toBe(0.0);
+
+    const wide = calculateStereoPan(100, 240, 100, 150, 1.4);
+    expect(wide).toBeGreaterThan(right3D);
   });
 
   it('guarantees round-trip fidelity between serialization and deserialization', () => {

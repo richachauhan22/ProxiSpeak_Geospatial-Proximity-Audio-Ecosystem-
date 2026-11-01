@@ -82,11 +82,15 @@
    - Standard WebRTC `RTCPeerConnection` configuration with Google STUN servers (`stun.l.google.com:19302`).
    - Glare-free deterministic offer/answer signaling: lexicographical peer ID comparison (`localId < remoteId`) determines caller/callee roles.
    - Early ICE candidate queuing buffer: candidates arriving prior to `setRemoteDescription` are cached and flushed atomically upon description readiness.
-3. **Spatial Web Audio API Graph**:
+3. **Spatial Web Audio API Graph & 3D Stereo Separation**:
    - Audio processing chain:  
-     `Remote MediaStream` ➔ `MediaStreamAudioSourceNode` ➔ `GainNode` (Distance Attenuation) ➔ `StereoPannerNode` (Directional Panning) ➔ `AudioContext.destination`
-   - Stereo Panning formula:  
-     $$\text{pan} = \text{clamp}\left(\frac{x_{\text{peer}} - x_{\text{local}}}{\text{panDistance}}, -1.0, 1.0\right)$$
+     `Remote MediaStream` ➔ `MediaStreamAudioSourceNode` ➔ `BiquadFilterNode` (Air Damping & Barrier Occlusion) ➔ `GainNode` (Distance Attenuation) ➔ `StereoPannerNode / 3D PannerNode` (Directional Panning with Stereo Separation) ➔ `AudioContext.destination`
+   - 3D Stereo Panning & Separation formula:  
+     $$\text{pan}_{3D} = \text{clamp}\left(\left(0.65 \cdot \frac{\Delta x}{d} \cdot f_{\text{near}} + 0.35 \cdot \frac{\Delta x}{d_{\max}}\right) \cdot S, -1.0, 1.0\right)$$
+   - Steady 60 FPS Canvas rendering pipeline:
+     - Offscreen static canvas caching for zero-cost background architectural blitting.
+     - Cached viewport metrics eliminating per-frame synchronous DOM layout recalculations.
+     - Native GPU-accelerated multi-stop radial gradient ambient occlusion shadows.
 4. **Voice Activity Detection (VAD)**:
    - Configured `AnalyserNode` with FFT size 256 for live decibel/RMS volume computation.
    - Triggers dynamic visual glowing halo around speaking avatars and animated audio wave meters on toolbar.

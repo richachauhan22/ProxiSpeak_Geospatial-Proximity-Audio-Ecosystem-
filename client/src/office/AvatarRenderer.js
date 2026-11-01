@@ -34,22 +34,24 @@ export class AvatarRenderer {
 
     ctx.save();
 
-    // 1. Directional Ambient Occlusion & Soft Floor Shadow beneath Avatar
+    // 1. Directional Ambient Occlusion & Soft Floor Shadow beneath Avatar (GPU-accelerated gradient)
     ctx.save();
-    ctx.beginPath();
     const shadowOffsetX = 3 * scale;
     const shadowOffsetY = 5 * scale;
-    ctx.ellipse(
-      x + shadowOffsetX,
-      y + radius + shadowOffsetY,
-      radius * 0.85,
-      radius * 0.32,
-      0,
-      0,
-      Math.PI * 2,
-    );
-    ctx.fillStyle = 'rgba(11, 14, 23, 0.28)';
-    ctx.filter = 'blur(2px)';
+    const shadowCX = x + shadowOffsetX;
+    const shadowCY = y + radius + shadowOffsetY;
+    const shadowRx = radius * 0.85;
+    const shadowRy = radius * 0.32;
+
+    ctx.translate(shadowCX, shadowCY);
+    ctx.scale(1, shadowRy / shadowRx);
+    ctx.beginPath();
+    ctx.arc(0, 0, shadowRx, 0, Math.PI * 2);
+    const shadowGrad = ctx.createRadialGradient(0, 0, shadowRx * 0.15, 0, 0, shadowRx);
+    shadowGrad.addColorStop(0, 'rgba(11, 14, 23, 0.34)');
+    shadowGrad.addColorStop(0.65, 'rgba(11, 14, 23, 0.14)');
+    shadowGrad.addColorStop(1, 'rgba(11, 14, 23, 0.0)');
+    ctx.fillStyle = shadowGrad;
     ctx.fill();
     ctx.restore();
 

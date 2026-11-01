@@ -18,12 +18,22 @@ export function calculateSpatialVolume(distance) {
 }
 
 /**
- * Calculates stereo pan offset [-1.0, 1.0] from source to target.
+ * Calculates 3D stereo pan offset [-1.0, 1.0] from source to target avatar with stereo separation.
+ * Supports backward-compatible 1D call signature (sourceX, targetX).
  */
-export function calculateStereoPan(sourceX, targetX) {
+export function calculateStereoPan(sourceX, targetX, sourceY = 0, targetY = 0, stereoSeparation = 1.0) {
   const deltaX = targetX - sourceX;
-  const pan = Math.max(-1.0, Math.min(1.0, deltaX / AUDIBLE_RADIUS));
-  return Number(pan.toFixed(4));
+  const deltaY = targetY - sourceY;
+  if (deltaY === 0 && (stereoSeparation === 1.0 || stereoSeparation === undefined)) {
+    const pan = Math.max(-1.0, Math.min(1.0, deltaX / AUDIBLE_RADIUS));
+    return Number(pan.toFixed(4));
+  }
+  const dist = Math.hypot(deltaX, deltaY);
+  if (dist === 0) return 0;
+  const sinAzimuth = deltaX / dist;
+  const lateral = Math.max(-1.0, Math.min(1.0, deltaX / AUDIBLE_RADIUS));
+  const rawPan = (0.65 * sinAzimuth + 0.35 * lateral) * stereoSeparation;
+  return Math.max(-1.0, Math.min(1.0, Number(rawPan.toFixed(4))));
 }
 
 /**
@@ -253,7 +263,7 @@ export function buildVisualGraph({
           drawnPairs.add(canonicalKey);
 
           const volume = calculateSpatialVolume(dist);
-          const pan = calculateStereoPan(u1.position.x, u2.position.x);
+          const pan = calculateStereoPan(u1.position.x, u2.position.x, u1.position.y, u2.position.y);
 
           edges.push({
             id: `edge-${canonicalKey}`,

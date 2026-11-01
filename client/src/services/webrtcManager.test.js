@@ -4,6 +4,7 @@ import {
   WebRTCManager,
   calculateSpatialVolume,
   calculateSpatialPan,
+  calculate3DSpatialPan,
   calculateLinearVolume,
   calculateExponentialVolume,
   calculateInverseVolume,
@@ -51,6 +52,47 @@ describe('Spatial Audio Math Calculations', () => {
   it('handles invalid or zero maxDistance in calculateSpatialPan', () => {
     expect(calculateSpatialPan(100, 0)).toBe(0);
     expect(calculateSpatialPan(100, -50)).toBe(0);
+  });
+
+  it('calculates 3D spatial panning with stereo separation across 2D/3D coordinates', () => {
+    // Perfectly centered directly ahead (dx = 0)
+    expect(calculate3DSpatialPan(0, 100, 280, 1.0)).toBe(0);
+
+    // Lateral right flank (dx = 140, dy = 0)
+    const rightPan = calculate3DSpatialPan(140, 0, 280, 1.0);
+    expect(rightPan).toBeGreaterThan(0.5);
+    expect(rightPan).toBeLessThanOrEqual(1.0);
+
+    // Lateral left flank (dx = -140, dy = 0)
+    const leftPan = calculate3DSpatialPan(-140, 0, 280, 1.0);
+    expect(leftPan).toBeLessThan(-0.5);
+    expect(leftPan).toBeGreaterThanOrEqual(-1.0);
+    expect(leftPan).toBeCloseTo(-rightPan, 4);
+
+    // Diagonal position (dx = 140, dy = 140)
+    const diagPan = calculate3DSpatialPan(140, 140, 280, 1.0);
+    expect(diagPan).toBeGreaterThan(0);
+    expect(diagPan).toBeLessThan(rightPan); // Diagonal has depth, so less extreme pan than direct side
+
+    // Stereo separation width scaling:
+    // Mono (stereoSeparation = 0) yields center
+    expect(calculate3DSpatialPan(140, 50, 280, 0)).toBe(0);
+
+    // Wide stereo (stereoSeparation = 1.4) yields wider separation than standard 1.0
+    const standardPan = calculate3DSpatialPan(100, 100, 280, 1.0);
+    const widePan = calculate3DSpatialPan(100, 100, 280, 1.4);
+    expect(widePan).toBeGreaterThan(standardPan);
+
+    // Boundary clamping
+    expect(calculate3DSpatialPan(500, 0, 280, 2.0)).toBe(1.0);
+    expect(calculate3DSpatialPan(-500, 0, 280, 2.0)).toBe(-1.0);
+
+    // Supports options object signature
+    const objPan = calculate3DSpatialPan({ dx: 140, dy: 0, maxDistance: 280, stereoSeparation: 1.0 });
+    expect(objPan).toBe(rightPan);
+
+    // calculateSpatialPan delegates to 3D when dy or stereoSeparation is passed
+    expect(calculateSpatialPan(140, 280, 50, 1.2)).toBe(calculate3DSpatialPan(140, 50, 280, 1.2));
   });
 
   it('calculates exponential drop-off with smooth perceptual curvature', () => {

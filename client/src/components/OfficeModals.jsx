@@ -310,6 +310,7 @@ export function SettingsModal({
   const [airDamping, setAirDamping] = useState(spatialConfig?.airDamping !== false);
   const [occlusionEnabled, setOcclusionEnabled] = useState(spatialConfig?.occlusionEnabled !== false);
   const [spatialAudioEnabled, setSpatialAudioEnabled] = useState(spatialConfig?.panEnabled !== false);
+  const [stereoSeparation, setStereoSeparation] = useState(spatialConfig?.stereoSeparation ?? 1.0);
   const [soundEffectsEnabled, setSoundEffectsEnabled] = useState(true);
   const [audioDevices, setAudioDevices] = useState([]);
   const [selectedDevice, setSelectedDevice] = useState('default');
@@ -323,6 +324,7 @@ export function SettingsModal({
       airDamping,
       occlusionEnabled,
       panEnabled: spatialAudioEnabled,
+      stereoSeparation,
       ...updates,
     };
     onSpatialConfigChange?.(nextConfig);
@@ -583,20 +585,133 @@ export function SettingsModal({
           </div>
 
           <div className="settings-toggle-grid">
-            <div className="toggle-item">
-              <div>
-                <strong>3D Spatial Panning</strong>
-                <p>Pan sound to left/right ear according to position</p>
+            <div className="toggle-item" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <strong>3D Spatial Panning</strong>
+                  <p>Pan sound to left/right ear according to position</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={spatialAudioEnabled}
+                  onChange={(e) => {
+                    setSpatialAudioEnabled(e.target.checked);
+                    emitConfigChange({ panEnabled: e.target.checked });
+                  }}
+                  className="modern-switch"
+                />
               </div>
-              <input
-                type="checkbox"
-                checked={spatialAudioEnabled}
-                onChange={(e) => {
-                  setSpatialAudioEnabled(e.target.checked);
-                  emitConfigChange({ panEnabled: e.target.checked });
-                }}
-                className="modern-switch"
-              />
+
+              {spatialAudioEnabled && (
+                <div style={{ marginTop: '10px', padding: '10px', background: '#f1f5f9', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: '700', color: '#334155' }}>
+                      🎧 Stereo Separation (Channel Width)
+                    </span>
+                    <strong style={{ fontSize: '11px', color: '#2563eb' }}>
+                      {Math.round(stereoSeparation * 100)}%
+                    </strong>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                    <button
+                      type="button"
+                      aria-label="Decrease stereo separation"
+                      onClick={() => {
+                        const next = Math.max(0, Number((stereoSeparation - 0.1).toFixed(2)));
+                        setStereoSeparation(next);
+                        emitConfigChange({ stereoSeparation: next });
+                      }}
+                      style={{
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        border: '1px solid #cbd5e1',
+                        background: '#ffffff',
+                        cursor: 'pointer',
+                        fontWeight: '700',
+                        fontSize: '12px',
+                      }}
+                    >
+                      −
+                    </button>
+                    <div style={{ flex: 1, height: '6px', background: '#e2e8f0', borderRadius: '3px', position: 'relative', overflow: 'hidden' }}>
+                      <div
+                        style={{
+                          width: `${Math.min(100, (stereoSeparation / 1.5) * 100)}%`,
+                          height: '100%',
+                          background: 'linear-gradient(90deg, #6366f1, #10b981)',
+                          borderRadius: '3px',
+                        }}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      aria-label="Increase stereo separation"
+                      onClick={() => {
+                        const next = Math.min(1.5, Number((stereoSeparation + 0.1).toFixed(2)));
+                        setStereoSeparation(next);
+                        emitConfigChange({ stereoSeparation: next });
+                      }}
+                      style={{
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        border: '1px solid #cbd5e1',
+                        background: '#ffffff',
+                        cursor: 'pointer',
+                        fontWeight: '700',
+                        fontSize: '12px',
+                      }}
+                    >
+                      +
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
+                    {[
+                      { label: 'Mono (0%)', val: 0.0 },
+                      { label: 'Standard 3D (100%)', val: 1.0 },
+                      { label: 'Wide Stereo (140%)', val: 1.4 },
+                    ].map((opt) => (
+                      <button
+                        key={opt.val}
+                        type="button"
+                        onClick={() => {
+                          setStereoSeparation(opt.val);
+                          emitConfigChange({ stereoSeparation: opt.val });
+                        }}
+                        style={{
+                          flex: 1,
+                          padding: '4px 6px',
+                          fontSize: '10px',
+                          fontWeight: Math.abs(stereoSeparation - opt.val) < 0.05 ? '700' : '500',
+                          borderRadius: '6px',
+                          border: Math.abs(stereoSeparation - opt.val) < 0.05 ? '1px solid #2563eb' : '1px solid #cbd5e1',
+                          background: Math.abs(stereoSeparation - opt.val) < 0.05 ? '#eff6ff' : '#ffffff',
+                          color: Math.abs(stereoSeparation - opt.val) < 0.05 ? '#1d4ed8' : '#64748b',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  {/* Stereo Channel Distribution Bar */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', color: '#64748b' }}>
+                    <span>Left Ear</span>
+                    <div style={{ flex: 1, height: '5px', background: '#e2e8f0', borderRadius: '3px', position: 'relative', overflow: 'hidden' }}>
+                      <div
+                        style={{
+                          position: 'absolute',
+                          left: `${Math.max(0, 50 - stereoSeparation * 35)}%`,
+                          right: `${Math.max(0, 50 - stereoSeparation * 35)}%`,
+                          height: '100%',
+                          background: 'linear-gradient(90deg, #6366f1, #10b981, #6366f1)',
+                          borderRadius: '3px',
+                        }}
+                      />
+                    </div>
+                    <span>Right Ear</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="toggle-item">

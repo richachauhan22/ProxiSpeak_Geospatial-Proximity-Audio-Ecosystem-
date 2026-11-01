@@ -32,6 +32,24 @@ export class OfficeRenderer {
     // Map background image fallback (if present in public)
     this.mapImage = new Image();
     this.mapImage.src = '/office_map.png';
+
+    // 60 FPS Offscreen Static Canvas Cache
+    this.staticCanvas = null;
+    this.staticCtx = null;
+    this.staticCacheKey = null;
+  }
+
+  updateViewport({ width, height, zoom = 100, panX = 0, panY = 0, lightingMode = 'daylight' }) {
+    this.width = width;
+    this.height = height;
+    this.zoom = zoom;
+    this.panX = panX;
+    this.panY = panY;
+    this.lightingMode = lightingMode;
+    const baseScale = Math.min(width / OFFICE_DIMENSIONS.width, height / OFFICE_DIMENSIONS.height);
+    this.scale = baseScale * (zoom / 100);
+    this.offsetX = (width - OFFICE_DIMENSIONS.width * this.scale) / 2 + this.panX;
+    this.offsetY = (height - OFFICE_DIMENSIONS.height * this.scale) / 2 + this.panY;
   }
 
   screenX(worldX) {
@@ -431,10 +449,9 @@ export class OfficeRenderer {
     // Table Ambient Occlusion Shadow
     ctx.beginPath();
     ctx.roundRect(btx - btw / 2 + 4 * this.scale, bty - bth / 2 + 8 * this.scale, btw, bth, 20 * this.scale);
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.2)';
-    ctx.filter = 'blur(3px)';
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.16)';
     ctx.fill();
-    ctx.filter = 'none';
+    ctx.restore();
 
     // Rich Walnut Wood Tabletop
     const walnutGrad = ctx.createLinearGradient(btx - btw / 2, bty, btx + btw / 2, bty);
@@ -955,27 +972,60 @@ export class OfficeRenderer {
   }
 
   /* =========================================================================
-     8. MASTER SCENE DRAW LOOP
+     8. MASTER SCENE DRAW LOOP (60 FPS OPTIMIZED)
      ========================================================================= */
 
+  /**
+   * Draws or blits the pre-rendered architectural floor plate at rock-steady 60 FPS.
+   * Invalidates and redraws only when viewport scale, pan, or lighting mode changes.
+   */
+  drawStaticBackdrop() {
+    const currentKey = `${Math.round(this.width)}_${Math.round(this.height)}_${this.scale.toFixed(4)}_${Math.round(this.offsetX)}_${Math.round(this.offsetY)}_${this.lightingMode}`;
+
+    if (this.staticCanvas && this.staticCtx && this.staticCacheKey === currentKey) {
+      this.ctx.drawImage(this.staticCanvas, 0, 0);
+      return;
+    }
+
+    if (typeof document !== 'undefined' && document.createElement) {
+      if (!this.staticCanvas) {
+        this.staticCanvas = document.createElement('canvas');
+      }
+      if (this.staticCanvas.width !== Math.round(this.width) || this.staticCanvas.height !== Math.round(this.height)) {
+        this.staticCanvas.width = Math.max(1, Math.round(this.width));
+        this.staticCanvas.height = Math.max(1, Math.round(this.height));
+      }
+      this.staticCtx = this.staticCanvas.getContext('2d');
+    }
+
+    if (this.staticCanvas && this.staticCtx) {
+      const liveCtx = this.ctx;
+      this.ctx = this.staticCtx;
+      this.staticCtx.clearRect(0, 0, this.width, this.height);
+      this.drawFloorBase();
+      this.drawZones();
+      this.drawFurniture();
+      this.drawGlassWalls();
+      this.drawInteractiveObjects();
+      this.drawLightingOverlays();
+      this.ctx = liveCtx;
+
+      this.staticCacheKey = currentKey;
+      this.ctx.drawImage(this.staticCanvas, 0, 0);
+    } else {
+      // Direct rendering fallback for mock/headless environments
+      this.drawFloorBase();
+      this.drawZones();
+      this.drawFurniture();
+      this.drawGlassWalls();
+      this.drawInteractiveObjects();
+      this.drawLightingOverlays();
+    }
+  }
+
   drawScene(localUser, participants = [], deltaSeconds = 0.016, target = null, spatialConfig = null, obstacles = []) {
-    // 1. Procedural floor base & textures
-    this.drawFloorBase();
-
-    // 2. Functional zones (Focus pods, Boardroom, Lounge, Library, Stage)
-    this.drawZones();
-
-    // 3. Furniture (Standing desks, chairs, conference tables, sofa, plants)
-    this.drawFurniture();
-
-    // 4. Glass walls & acoustic partitions
-    this.drawGlassWalls();
-
-    // 5. Interactive office objects (Whiteboard, Broadcast pillar, Coffee station)
-    this.drawInteractiveObjects();
-
-    // 6. Dynamic daylight & ambient pendant lighting overlays
-    this.drawLightingOverlays();
+    // 1-6. High-performance cached static architectural background
+    this.drawStaticBackdrop();
 
     // 7. Spatial audio attenuation halo around local user
     if (localUser) {

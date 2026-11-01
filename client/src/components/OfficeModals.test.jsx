@@ -102,6 +102,27 @@ describe('SettingsModal WebRTC & Audio Configuration', () => {
       expect.objectContaining({ minDistance: 90 }),
     );
   });
+
+  it('renders 3D spatial panning stereo separation controls and notifies on preset change', () => {
+    const handleConfigChange = vi.fn();
+    render(
+      <SettingsModal
+        isOpen={true}
+        spatialConfig={{ panEnabled: true, stereoSeparation: 1.0 }}
+        onSpatialConfigChange={handleConfigChange}
+      />,
+    );
+
+    expect(screen.getByText(/stereo separation/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/100%/i).length).toBeGreaterThan(0);
+
+    const widePreset = screen.getByRole('button', { name: /wide stereo/i });
+    fireEvent.click(widePreset);
+
+    expect(handleConfigChange).toHaveBeenCalledWith(
+      expect.objectContaining({ stereoSeparation: 1.4 }),
+    );
+  });
 });
 
 describe('Other Office Modals', () => {

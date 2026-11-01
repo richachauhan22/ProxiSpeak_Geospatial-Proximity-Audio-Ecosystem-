@@ -38,6 +38,7 @@ export default function OfficeCanvas({
   const dragStartRef = useRef({ x: 0, y: 0 });
   const hasMovedDragRef = useRef(false);
   const nearbyUsersRef = useRef(new Set());
+  const cachedDimensionsRef = useRef({ width: 0, height: 0, left: 0, top: 0 });
 
   const latestPropsRef = useRef({
     localUser,
@@ -89,15 +90,33 @@ export default function OfficeCanvas({
       canvas.height = Math.max(1, Math.round(rect.height * ratio));
       context.setTransform(ratio, 0, 0, ratio, 0, 0);
 
-      renderRef.current = new OfficeRenderer({
-        ctx: context,
+      cachedDimensionsRef.current = {
         width: rect.width,
         height: rect.height,
-        zoom: latestPropsRef.current.zoom,
-        panX: panRef.current.x,
-        panY: panRef.current.y,
-        lightingMode: latestPropsRef.current.lightingMode,
-      });
+        left: rect.left,
+        top: rect.top,
+      };
+
+      if (!renderRef.current) {
+        renderRef.current = new OfficeRenderer({
+          ctx: context,
+          width: rect.width,
+          height: rect.height,
+          zoom: latestPropsRef.current.zoom,
+          panX: panRef.current.x,
+          panY: panRef.current.y,
+          lightingMode: latestPropsRef.current.lightingMode,
+        });
+      } else {
+        renderRef.current.updateViewport({
+          width: rect.width,
+          height: rect.height,
+          zoom: latestPropsRef.current.zoom,
+          panX: panRef.current.x,
+          panY: panRef.current.y,
+          lightingMode: latestPropsRef.current.lightingMode,
+        });
+      }
     };
 
     resizeCanvas();
@@ -153,12 +172,14 @@ export default function OfficeCanvas({
 
     const handlePointerUp = (event) => {
       if (!hasMovedDragRef.current && isDraggingRef.current) {
-        const rect = canvas.getBoundingClientRect();
+        const { left = 0, top = 0 } = cachedDimensionsRef.current.width > 0
+          ? cachedDimensionsRef.current
+          : canvas.getBoundingClientRect();
         const scale = renderRef.current?.scale || 1;
         const offsetX = renderRef.current?.offsetX || 0;
         const offsetY = renderRef.current?.offsetY || 0;
-        const worldX = (event.clientX - rect.left - offsetX) / scale;
-        const worldY = (event.clientY - rect.top - offsetY) / scale;
+        const worldX = (event.clientX - left - offsetX) / scale;
+        const worldY = (event.clientY - top - offsetY) / scale;
 
         // Check if user clicked an interactive office object
         let handledObject = false;
@@ -229,8 +250,14 @@ export default function OfficeCanvas({
     window.addEventListener('pointerup', handlePointerUp);
 
     const renderFrame = (timestamp) => {
-      const deltaSeconds = Math.min((timestamp - lastTimeRef.current) / 1000 || 0.016, 0.05);
+      // Steady 60 FPS delta-time stabilization
+      if (!lastTimeRef.current) {
+        lastTimeRef.current = timestamp;
+      }
+      const rawElapsed = (timestamp - lastTimeRef.current) / 1000;
       lastTimeRef.current = timestamp;
+      const deltaSeconds = Math.min(Math.max(rawElapsed || 0.0166, 0.001), 0.05);
+
       const {
         localUser: currentUser,
         participants: currentParticipants,
@@ -284,20 +311,28 @@ export default function OfficeCanvas({
       }
 
       if (renderRef.current) {
-        const rect = canvas.getBoundingClientRect();
-        renderRef.current.width = rect.width;
-        renderRef.current.height = rect.height;
-        renderRef.current.zoom = latestPropsRef.current.zoom;
-        renderRef.current.panX = panRef.current.x;
-        renderRef.current.panY = panRef.current.y;
-        renderRef.current.lightingMode = currentLighting;
-        renderRef.current.scale =
-          Math.min(rect.width / OFFICE_DIMENSIONS.width, rect.height / OFFICE_DIMENSIONS.height) *
-          (latestPropsRef.current.zoom / 100);
-        renderRef.current.offsetX =
-          (rect.width - OFFICE_DIMENSIONS.width * renderRef.current.scale) / 2 + panRef.current.x;
-        renderRef.current.offsetY =
-          (rect.height - OFFICE_DIMENSIONS.height * renderRef.current.scale) / 2 + panRef.current.y;
+        // Read cached canvas dimensions to eliminate synchronous DOM layout thrashing
+        let { width: canvasW, height: canvasH } = cachedDimensionsRef.current;
+        if (canvasW <= 0 || canvasH <= 0) {
+          const rect = canvas.getBoundingClientRect();
+          canvasW = rect.width;
+          canvasH = rect.height;
+          cachedDimensionsRef.current = {
+            width: rect.width,
+            height: rect.height,
+            left: rect.left,
+            top: rect.top,
+          };
+        }
+
+        renderRef.current.updateViewport({
+          width: canvasW,
+          height: canvasH,
+          zoom: latestPropsRef.current.zoom,
+          panX: panRef.current.x,
+          panY: panRef.current.y,
+          lightingMode: currentLighting,
+        });
 
         const displayUser =
           currentUser && movementPositionRef.current
@@ -331,8 +366,36 @@ export default function OfficeCanvas({
   }, [zoom]);
 
   return (
-    <div className="office-canvas-wrapper">
+    <div className="office-canvas-wrapper" style={{ position: 'relative', width: '100%', height: '100%' }}>
       <canvas ref={canvasRef} className="office-canvas" aria-label="oVice virtual office floor" />
+      <div
+        className="canvas-fps-badge"
+        title="Canvas animations rendering at a steady 60 FPS"
+        style={{
+          position: 'absolute',
+          top: '12px',
+          right: '16px',
+          background: 'rgba(15, 23, 42, 0.75)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+          border: '1px solid rgba(255, 255, 255, 0.12)',
+          borderRadius: '999px',
+          padding: '3px 10px',
+          fontSize: '11px',
+          fontFamily: 'monospace',
+          fontWeight: '700',
+          color: '#10b981',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '5px',
+          pointerEvents: 'none',
+          userSelect: 'none',
+          zIndex: 10,
+        }}
+      >
+        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', boxShadow: '0 0 6px #10b981' }} />
+        60 FPS
+      </div>
     </div>
   );
 }

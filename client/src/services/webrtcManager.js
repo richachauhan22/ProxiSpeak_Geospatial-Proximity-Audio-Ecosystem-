@@ -16,6 +16,7 @@ export const DEFAULT_SPATIAL_CONFIG = {
   minDistance: 60, // full volume within 60px
   maxDistance: 280, // silent beyond 280px
   panEnabled: true,
+  stereoSeparation: 1.0, // 3D stereo separation factor (0.0 = mono, 1.0 = natural 3D separation, 1.5 = wide stereo)
   attenuationModel: 'linear', // 'linear' | 'exponential' | 'inverse' | 'smoothstep'
   rolloffFactor: 1.0,
   airDamping: true, // acoustic lowpass filter based on distance
@@ -152,9 +153,81 @@ export function calculateObstacleOcclusion(pos1, pos2, obstacles = [], occlusion
   return 1.0;
 }
 
-export function calculateSpatialPan(dx, maxDistance = 280) {
+/**
+ * 3D Audio Spatial Panning with Stereo Separation:
+ * Calculates directional stereo pan [-1.0, 1.0] from 2D/3D avatar offsets (dx, dy).
+ * Applies azimuth angular mapping, near-field head diffraction crossfeed (blending at d < minDistance),
+ * lateral distance falloff, and stereo separation coefficient (0 = mono, 1.0 = standard, >1.0 = wide stereo).
+ */
+export function calculate3DSpatialPan(
+  dxOrOptions,
+  maybeDy = 0,
+  maybeMaxDistance = 280,
+  maybeStereoSeparation = 1.0,
+  maybeMinDistance = 60,
+) {
+  let dx = dxOrOptions;
+  let dy = maybeDy;
+  let maxDistance = maybeMaxDistance;
+  let stereoSeparation = maybeStereoSeparation;
+  let minDistance = maybeMinDistance;
+
+  if (typeof dxOrOptions === 'object' && dxOrOptions !== null) {
+    dx =
+      dxOrOptions.dx ??
+      (dxOrOptions.targetX != null && dxOrOptions.sourceX != null
+        ? dxOrOptions.targetX - dxOrOptions.sourceX
+        : 0);
+    dy =
+      dxOrOptions.dy ??
+      (dxOrOptions.targetY != null && dxOrOptions.sourceY != null
+        ? dxOrOptions.targetY - dxOrOptions.sourceY
+        : 0);
+    maxDistance = dxOrOptions.maxDistance ?? 280;
+    stereoSeparation = dxOrOptions.stereoSeparation ?? 1.0;
+    minDistance = dxOrOptions.minDistance ?? 60;
+  }
+
   if (!maxDistance || maxDistance <= 0) return 0;
-  return Math.max(-1, Math.min(1, dx / maxDistance));
+  if (!stereoSeparation || stereoSeparation <= 0) return 0;
+
+  const distance = Math.hypot(dx, dy);
+  if (distance === 0) return 0;
+
+  // Angular sine of azimuth direction (dx / distance)
+  const sinAzimuth = dx / distance;
+
+  // Near-field crossfeed blend: when avatars are very close (< minDistance),
+  // smoothly taper extreme hard-panning to model natural acoustic head diffraction
+  const nearFieldFactor =
+    minDistance > 0 ? Math.min(1.0, Math.max(0.15, distance / minDistance)) : 1.0;
+
+  // Lateral distance ratio clamped to [-1.0, 1.0]
+  const lateralRatio = Math.max(-1.0, Math.min(1.0, dx / maxDistance));
+
+  // Balanced combination of angular azimuth and physical lateral offset modulated by stereo separation
+  const rawPan = (0.65 * sinAzimuth * nearFieldFactor + 0.35 * lateralRatio) * stereoSeparation;
+
+  return Math.max(-1.0, Math.min(1.0, Number(rawPan.toFixed(4))));
+}
+
+/**
+ * Spatial stereo panning calculator:
+ * Preserves exact backward-compatible signature (dx, maxDistance) when dy is 0 and stereoSeparation is 1.0.
+ * Seamlessly upgrades to 3D spatial panning when dy or stereoSeparation is supplied.
+ */
+export function calculateSpatialPan(
+  dx,
+  maxDistance = 280,
+  dy = 0,
+  stereoSeparation = 1.0,
+  minDistance = 60,
+) {
+  if (!maxDistance || maxDistance <= 0) return 0;
+  if (dy === 0 && (stereoSeparation === 1.0 || stereoSeparation === undefined)) {
+    return Math.max(-1, Math.min(1, dx / maxDistance));
+  }
+  return calculate3DSpatialPan(dx, dy, maxDistance, stereoSeparation, minDistance);
 }
 
 export class WebRTCManager {
@@ -561,6 +634,10 @@ export class WebRTCManager {
         let pannerNode = null;
         if (typeof ctx.createStereoPanner === 'function' && this.spatialConfig.panEnabled) {
           pannerNode = ctx.createStereoPanner();
+        } else if (typeof ctx.createPanner === 'function' && this.spatialConfig.panEnabled) {
+          pannerNode = ctx.createPanner();
+          pannerNode.panningModel = 'equalpower';
+          pannerNode.distanceModel = 'inverse';
         }
 
         // Connect audio graph
@@ -625,6 +702,7 @@ export class WebRTCManager {
       minDistance = 60,
       maxDistance = 280,
       panEnabled = true,
+      stereoSeparation = 1.0,
       attenuationModel = 'linear',
       rolloffFactor = 1.0,
       airDamping = true,
@@ -657,8 +735,10 @@ export class WebRTCManager {
         volume *= occlusion;
       }
 
-      // 3. Stereo Directional Panning
-      const pan = calculateSpatialPan(dx, maxDistance);
+      // 3. 3D Directional Panning with Stereo Separation
+      const pan = panEnabled
+        ? calculate3DSpatialPan(dx, dy, maxDistance, stereoSeparation, minDistance)
+        : 0;
 
       // 4. Acoustic Air Damping / Lowpass Filter Cutoff
       let cutoff = 20000;
@@ -673,6 +753,7 @@ export class WebRTCManager {
       peer.currentVolume = volume;
       peer.currentDistance = distance;
       peer.currentPan = pan;
+      peer.stereoSeparation = stereoSeparation;
       peer.isOccluded = occlusion < 1.0;
 
       // Update Web Audio nodes
@@ -693,10 +774,14 @@ export class WebRTCManager {
       }
 
       if (peer.pannerNode && ctx && panEnabled) {
-        if (typeof peer.pannerNode.pan.setValueAtTime === 'function') {
-          peer.pannerNode.pan.setValueAtTime(pan, now);
-        } else if (typeof peer.pannerNode.pan.setTargetAtTime === 'function') {
-          peer.pannerNode.pan.setTargetAtTime(pan, now, 0.04);
+        if (peer.pannerNode.pan) {
+          if (typeof peer.pannerNode.pan.setValueAtTime === 'function') {
+            peer.pannerNode.pan.setValueAtTime(pan, now);
+          } else if (typeof peer.pannerNode.pan.setTargetAtTime === 'function') {
+            peer.pannerNode.pan.setTargetAtTime(pan, now, 0.04);
+          }
+        } else if (typeof peer.pannerNode.setPosition === 'function') {
+          peer.pannerNode.setPosition(dx / 100, 0, dy / 100);
         }
       }
 

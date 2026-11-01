@@ -74,6 +74,7 @@ function App() {
     airDamping: true,
     occlusionEnabled: true,
     panEnabled: true,
+    stereoSeparation: 1.0,
     proximityRadius: 100,
   });
 
