@@ -17,7 +17,7 @@ export function getSpatialAudioSettings(localUser, remoteUser) {
   const dy = remoteUser.y - localUser.y;
   const distance = Math.hypot(dx, dy);
 
-  if (distance > MAX_HEARING_DISTANCE) {
+  if (distance >= MAX_HEARING_DISTANCE) {
     return { audible: false, volume: 0, pan: 0, distance };
   }
 
