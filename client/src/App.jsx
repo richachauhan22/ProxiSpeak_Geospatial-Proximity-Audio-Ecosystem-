@@ -17,12 +17,18 @@ import {
   HelpModal,
   QuickToolsModal,
   LeaveConfirmModal,
+  LayoutPersistenceModal,
 } from './components/OfficeModals';
 import {
   CollaborativeWhiteboardModal,
   ScreenBroadcastModal,
 } from './components/InteractiveCanvasModals';
 import { DEFAULT_LOCAL_USER, DEFAULT_OFFICE_PARTICIPANTS, OFFICE_OBSTACLES } from './office/OfficeMap';
+import {
+  fetchOfficeLayout,
+  saveOfficeLayout,
+  resetOfficeLayout as resetOfficeLayoutApi,
+} from './services/officePersistenceService';
 import { sounds } from './services/soundEffects';
 
 function App() {
@@ -59,6 +65,8 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
+  const [layoutPersistenceOpen, setLayoutPersistenceOpen] = useState(false);
+  const [officeObstacles, setOfficeObstacles] = useState(() => OFFICE_OBSTACLES);
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
   const [miniMapOpen, setMiniMapOpen] = useState(false);
   const [whiteboardOpen, setWhiteboardOpen] = useState(false);
@@ -127,7 +135,7 @@ function App() {
     participants,
     enabled: isOfficeActive,
     spatialConfig,
-    obstacles: OFFICE_OBSTACLES,
+    obstacles: officeObstacles,
   });
 
   useEffect(() => {
@@ -242,6 +250,38 @@ function App() {
     socket.on('error', handleError);
     socket.on('office:left', handleOfficeLeft);
 
+    const handleLayoutUpdated = (data) => {
+      if (Array.isArray(data?.furnitureObstacles)) {
+        setOfficeObstacles(data.furnitureObstacles);
+      }
+    };
+    const handleObstacleAdded = (data) => {
+      if (data?.obstacle) {
+        setOfficeObstacles((prev) => {
+          const exists = prev.some((o) => o.id === data.obstacle.id);
+          if (exists) return prev.map((o) => (o.id === data.obstacle.id ? data.obstacle : o));
+          return [...prev, data.obstacle];
+        });
+      }
+    };
+    const handleObstacleUpdated = (data) => {
+      if (data?.obstacle) {
+        setOfficeObstacles((prev) =>
+          prev.map((o) => (o.id === data.obstacle.id ? data.obstacle : o)),
+        );
+      }
+    };
+    const handleObstacleRemoved = (data) => {
+      if (data?.obstacleId) {
+        setOfficeObstacles((prev) => prev.filter((o) => o.id !== data.obstacleId));
+      }
+    };
+
+    socket.on('office:layout:updated', handleLayoutUpdated);
+    socket.on('office:obstacle:added', handleObstacleAdded);
+    socket.on('office:obstacle:updated', handleObstacleUpdated);
+    socket.on('office:obstacle:removed', handleObstacleRemoved);
+
     const handlePopState = () => {
       if (window.location.pathname === '/office' || joined) {
         setPage('office');
@@ -260,6 +300,10 @@ function App() {
       socket.off('avatar:move', handleAvatarMove);
       socket.off('error', handleError);
       socket.off('office:left', handleOfficeLeft);
+      socket.off('office:layout:updated', handleLayoutUpdated);
+      socket.off('office:obstacle:added', handleObstacleAdded);
+      socket.off('office:obstacle:updated', handleObstacleUpdated);
+      socket.off('office:obstacle:removed', handleObstacleRemoved);
     };
   }, [joined, displayName, avatarUrl, avatarColor]);
 
@@ -434,6 +478,87 @@ function App() {
     showToast(`Spatial Sound Profile: ${preset.toUpperCase()}`);
   };
 
+  // Room Persistence: Fetch office layout & sound-blocking furniture obstacles from MongoDB
+  useEffect(() => {
+    let isMounted = true;
+    fetchOfficeLayout(officeId)
+      .then((res) => {
+        if (isMounted && res?.furnitureObstacles && res.furnitureObstacles.length > 0) {
+          setOfficeObstacles(res.furnitureObstacles);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, [officeId]);
+
+  const handleSaveLayoutToMongo = async () => {
+    await saveOfficeLayout(officeId, {
+      name: 'ProxiSpeak Virtual Office',
+      bounds: { width: 1440, height: 894 },
+      furnitureObstacles: officeObstacles,
+    });
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('office:layout:save', {
+        officeId,
+        furnitureObstacles: officeObstacles,
+      });
+    }
+    showToast('Saved office layout and sound-blocking obstacles to MongoDB');
+  };
+
+  const handleAddObstacle = (newObs) => {
+    setOfficeObstacles((prev) => [...prev, newObs]);
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('office:obstacle:add', {
+        officeId,
+        obstacle: newObs,
+      });
+    }
+    showToast(`Added obstacle: ${newObs.name} (Blocks Sound)`);
+  };
+
+  const handleRemoveObstacle = (obstacleId) => {
+    setOfficeObstacles((prev) => prev.filter((o) => o.id !== obstacleId));
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('office:obstacle:remove', {
+        officeId,
+        obstacleId,
+      });
+    }
+    showToast('Obstacle removed from floor');
+  };
+
+  const handleToggleSoundBlocking = (obstacleId) => {
+    setOfficeObstacles((prev) =>
+      prev.map((o) => {
+        if (o.id === obstacleId) {
+          const nextBlocks = o.blocksSound === false;
+          const updated = { ...o, blocksSound: nextBlocks };
+          if (socketRef.current?.connected) {
+            socketRef.current.emit('office:obstacle:add', {
+              officeId,
+              obstacle: updated,
+            });
+          }
+          showToast(nextBlocks ? 'Obstacle now blocks sound' : 'Obstacle now passes sound');
+          return updated;
+        }
+        return o;
+      }),
+    );
+  };
+
+  const handleResetLayout = async () => {
+    await resetOfficeLayoutApi(officeId);
+    setOfficeObstacles(OFFICE_OBSTACLES);
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('office:layout:reset', { officeId });
+    }
+    showToast('Reset office blueprint and obstacles to default');
+  };
+
   const currentLocalUser = {
     ...localUser,
     isMuted,
@@ -527,6 +652,7 @@ function App() {
               onOpenBroadcast={() => setBroadcastOpen(true)}
               onDeskSit={handleDeskSit}
               onToast={showToast}
+              obstacles={officeObstacles}
             />
 
             {/* Floating Emojis */}
@@ -648,7 +774,22 @@ function App() {
               onRequestMic={startAudio}
             />
             <HelpModal isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
-            <QuickToolsModal isOpen={toolsOpen} onClose={() => setToolsOpen(false)} />
+            <QuickToolsModal
+              isOpen={toolsOpen}
+              onClose={() => setToolsOpen(false)}
+              onOpenLayoutPersistence={() => setLayoutPersistenceOpen(true)}
+            />
+            <LayoutPersistenceModal
+              isOpen={layoutPersistenceOpen}
+              onClose={() => setLayoutPersistenceOpen(false)}
+              officeId={officeId}
+              obstacles={officeObstacles}
+              onSaveLayout={handleSaveLayoutToMongo}
+              onAddObstacle={handleAddObstacle}
+              onRemoveObstacle={handleRemoveObstacle}
+              onToggleSoundBlocking={handleToggleSoundBlocking}
+              onResetLayout={handleResetLayout}
+            />
             <LeaveConfirmModal
               isOpen={leaveConfirmOpen}
               onClose={() => setLeaveConfirmOpen(false)}

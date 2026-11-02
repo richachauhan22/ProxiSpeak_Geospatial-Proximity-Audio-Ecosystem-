@@ -104,17 +104,29 @@ export const PARTITIONS = [
 ];
 
 export const OFFICE_OBSTACLES = [
-  ...DESK_POSITIONS.map(([x, y]) => ({
+  ...DESK_POSITIONS.map(([x, y], idx) => ({
+    id: `desk-obs-${idx + 1}`,
+    name: `Workstation Desk ${idx + 1}`,
+    type: 'desk',
     x: x - 45,
     y: y - 35,
     width: 90,
     height: 70,
+    blocksSound: true,
+    soundAttenuationDb: -10,
+    soundOcclusionFactor: 0.55,
   })),
-  ...PARTITIONS.map(([x, y, width, depth]) => ({
+  ...PARTITIONS.map(([x, y, width, depth], idx) => ({
+    id: `partition-obs-${idx + 1}`,
+    name: `Acoustic Partition Wall ${idx + 1}`,
+    type: 'partition',
     x,
     y,
     width,
     height: depth,
+    blocksSound: true,
+    soundAttenuationDb: -18,
+    soundOcclusionFactor: 0.35,
   })),
 ];
 

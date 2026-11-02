@@ -192,6 +192,7 @@
 | **Week 2** | **WebRTC P2P & Spatial Audio** | Hardware `getUserMedia` capture, deterministic glare-free WebRTC mesh, Web Audio distance attenuation & stereo panning, Voice Activity Detection (VAD), Bottom Toolbar HUD. | WebRTC, Web Audio API (`GainNode`, `StereoPanner`), Socket.io | ✅ Completed |
 | **Week 3** | **Proximity Gating & Testing Harness** | Strict 100px proximity audio gating, MongoDB `$near` queries, spatial clustering endpoint, isometric map & avatar integration, Vitest unit/integration test harness (108 tests). | Vitest, Testing Library, JSDOM, MongoDB `$near`, Canvas 2D | ✅ Completed |
 | **Week 4** | **Dynamic Attenuation & Telemetry** | 4 attenuation algorithms (Linear, Exponential, Logarithmic, Smoothstep), visual graph serializer & validator, MongoDB Time-Series (5,000 writes/sec), Multi-zone hybrid floor plan. | Web Audio API, MongoDB Time-Series, Math Algorithms, Canvas HUD | ✅ Completed |
+| **Week 5** | **Room Persistence & Sound-Blocking Obstacles** | MongoDB office layout persistence, sound-blocking furniture obstacles schema (`furnitureObstacleSchema`), raycast acoustic occlusion, LayoutPersistenceModal, REST CRUD API. | MongoDB 6+, Mongoose, Express, Socket.io, Web Audio Occlusion | ✅ Completed |
 
 ---
 
@@ -203,14 +204,14 @@ The project features a **100% passing test suite** spanning both frontend and ba
 Test Suites Execution Summary:
 ------------------------------------------------------------
 Client Test Files  : 7 passed (7)
-Client Tests       : 80 passed (80)
+Client Tests       : 85 passed (85)
 ------------------------------------------------------------
-Server Test Files  : 3 passed (3)
-Server Tests       : 28 passed (28)
+Server Test Files  : 6 passed (6)
+Server Tests       : 53 passed (53)
 ------------------------------------------------------------
-Total Test Suites  : 10 passed (10)
-Total Tests        : 108 passed (108)
-Test Framework     : Vitest v2.1.8 + React Testing Library + JSDOM
+Total Test Suites  : 13 passed (13)
+Total Tests        : 138 passed (138)
+Test Framework     : Vitest v2.1.9 + React Testing Library + JSDOM
 ```
 
 ### Key Tested Scenarios:

@@ -59,7 +59,19 @@ To scale beyond a single Node.js instance and prevent $O(N^2)$ mesh connection d
 
 ---
 
-### 🗄️ Backend Geospatial & Telemetry (`/server`)
+### 🗄️ Backend Geospatial, Room Persistence & Telemetry (`/server`)
+- **MongoDB Room & Layout Persistence ([`server/src/officePersistence.js`](server/src/officePersistence.js) & [`server/src/officeSchema.js`](server/src/officeSchema.js))**:
+  - Full architectural room blueprint persistence saving office bounds, multi-zone environments, and physical furniture obstacles into MongoDB.
+  - Dedicated **Furniture Obstacles Schema** (`furnitureObstacleSchema`) capturing `x, y, width, height`, material, and sound-blocking attributes (`blocksSound: true`, `soundAttenuationDb: -12`, `soundOcclusionFactor: 0.5`).
+  - Raycasted audio ray intersection checks automatically dampen and muffle spatial WebRTC audio between colleagues separated by desks, partitions, and conference tables.
+  - Interactive UI modal ([`LayoutPersistenceModal`](client/src/components/OfficeModals.jsx)) to add, toggle, and save sound-blocking furniture obstacles directly to MongoDB with real-time Socket.io and Redis cross-node replication.
+  - REST endpoints:
+    - `GET /api/offices/:officeId/layout`: Retrieves full layout and sound-blocking obstacles.
+    - `POST /api/offices/:officeId/layout` & `PUT`: Upserts room blueprint and obstacles in MongoDB.
+    - `GET /api/offices/:officeId/obstacles?blocksSound=true`: Queries furniture obstacles that block sound.
+    - `POST /api/offices/:officeId/obstacles`: Adds or bulk-saves obstacles into MongoDB.
+    - `DELETE /api/offices/:officeId/obstacles/:obstacleId`: Removes obstacles.
+    - `POST /api/offices/:officeId/reset`: Resets room layout to standard default blueprint.
 - **MongoDB Geospatial Indexing**:
   - Dual `2d` Euclidean flat Cartesian index and `2dsphere` GeoJSON index.
   - `$near` queries (`GET /api/offices/:officeId/nearby`) and proximity clustering (`GET /api/offices/:officeId/groups`).
@@ -89,10 +101,12 @@ PROXISPEAK/
 │   │   ├── config.js           # Multi-node, Redis, and mesh scaling environment settings
 │   │   ├── redisClient.js      # Pure Node.js Redis Pub/Sub client & RESP parser
 │   │   ├── meshScaler.js       # SpatialGrid O(1) hashing & mesh candidate optimizer
-│   │   ├── officeSchema.js     # MongoDB geospatial schemas
+│   │   ├── officeSchema.js     # MongoDB room, layout, and furniture obstacles schemas
+│   │   ├── officePersistence.js# MongoDB office layout & sound-blocking obstacles repository
 │   │   ├── graphValidator.js   # Topology graph validator
 │   │   ├── telemetryIngestionAudit.js # 5,000 writes/sec stress audit suite
 │   │   └── server.js           # Express app & Socket.io signaling server
+│   └── package.json            # Server dependencies
 └── package.json                # Monorepo workspace configuration
 ```
 
@@ -140,18 +154,20 @@ PORT=4001 NODE_INSTANCE_ID=node-2 REDIS_URL=redis://127.0.0.1:6379 npm run dev -
 
 ## 🧪 Testing & Verification
 
-Execute the complete automated test suite (121 tests across 12 test files):
+Execute the complete automated test suite (138 tests across 13 test files):
 ```bash
 npm test
 ```
 
 ### Test Coverage Highlights:
-- **Client (80 tests)**:
-  - `webrtcManager.test.js`: Web Audio graph connection, attenuation math, pan clamping, mute/unmute, and candidate buffering.
+- **Client (85 tests)**:
+  - `webrtcManager.test.js`: Web Audio graph connection, attenuation math, pan clamping, mute/unmute, candidate buffering, and sound-blocking obstacle occlusion.
   - `useWebRTC.test.js`: 100px proximity gating, lifecycle management, and permission states.
-  - `OfficeModals.test.jsx`, `BottomToolbar.test.jsx`, `MovementController.test.js`, `visualGraphSerializer.test.js`.
-- **Server (41 tests)**:
+  - `OfficeModals.test.jsx`: Layout persistence modal, adding sound-blocking obstacles, MongoDB sync status, and audio settings.
+  - `BottomToolbar.test.jsx`, `MovementController.test.js`, `visualGraphSerializer.test.js`.
+- **Server (53 tests)**:
+  - `officePersistence.test.js`: Mongoose schema validation, default blueprint generation, layout saving, obstacle CRUD, sound-blocking filter, and blueprint resetting.
   - `redisClient.test.js`: RESP encoder/parser, publish/subscribe routing, and echo suppression.
   - `meshScaler.test.js`: Spatial grid coordinate hashing and active speaker candidate pruning.
-  - `server.test.js`: Signaling routing, proximity gating, and REST endpoints.
+  - `server.test.js`: Room persistence REST endpoints, obstacle filtering (`blocksSound=true`), socket layout signaling, and proximity gating.
   - `graphValidator.test.js` & `telemetryIngestionAudit.test.js`.

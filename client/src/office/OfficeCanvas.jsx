@@ -24,6 +24,7 @@ export default function OfficeCanvas({
   onOpenBroadcast,
   onDeskSit,
   onToast,
+  obstacles = OFFICE_OBSTACLES,
 }) {
   const canvasRef = useRef(null);
   const frameRef = useRef(null);
@@ -63,7 +64,14 @@ export default function OfficeCanvas({
     onOpenBroadcast,
     onDeskSit,
     onToast,
+    obstacles,
   };
+
+  useEffect(() => {
+    if (movementRef.current?.collisionEngine) {
+      movementRef.current.collisionEngine.obstacles = obstacles || OFFICE_OBSTACLES;
+    }
+  }, [obstacles]);
 
   // Recenter on local user if requested
   useEffect(() => {
@@ -126,7 +134,7 @@ export default function OfficeCanvas({
       speed: 260,
       worldWidth: OFFICE_DIMENSIONS.width,
       worldHeight: OFFICE_DIMENSIONS.height,
-      obstacles: OFFICE_OBSTACLES,
+      obstacles: obstacles || OFFICE_OBSTACLES,
     });
 
     movementUserIdRef.current = localUser?.id || null;
@@ -345,7 +353,7 @@ export default function OfficeCanvas({
           deltaSeconds,
           movementRef.current?.target,
           latestPropsRef.current.spatialConfig,
-          OFFICE_OBSTACLES,
+          latestPropsRef.current.obstacles || OFFICE_OBSTACLES,
         );
       }
 

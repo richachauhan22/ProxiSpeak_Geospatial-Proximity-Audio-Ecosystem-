@@ -5,7 +5,17 @@ import mongoose from 'mongoose';
 import { randomUUID } from 'node:crypto';
 import { Server } from 'socket.io';
 import { config } from './config.js';
-import { OfficeModel } from './officeSchema.js';
+import { OfficeModel, FurnitureObstacleModel } from './officeSchema.js';
+import {
+  getOfficeWithLayout,
+  saveOfficeLayout,
+  getOfficeObstacles,
+  saveOfficeObstacle,
+  saveOfficeObstaclesBulk,
+  deleteOfficeObstacle,
+  resetOfficeLayout,
+  seedOfficePersistence,
+} from './officePersistence.js';
 import {
   UserLocationModel,
   queryNearbyUsers,
@@ -66,6 +76,14 @@ redisService.on('remote_event', ({ channel, event, data, origin }) => {
   } else if (event === 'avatar:left') {
     io.to(data.officeId).emit('avatar:left', data);
     getOfficeGrid(data.officeId).remove(data.id);
+  } else if (event === 'office:layout:updated') {
+    io.to(data.officeId).emit('office:layout:updated', data);
+  } else if (event === 'office:obstacle:added') {
+    io.to(data.officeId).emit('office:obstacle:added', data);
+  } else if (event === 'office:obstacle:updated') {
+    io.to(data.officeId).emit('office:obstacle:updated', data);
+  } else if (event === 'office:obstacle:removed') {
+    io.to(data.officeId).emit('office:obstacle:removed', data);
   } else if (
     event === 'webrtc:offer' ||
     event === 'webrtc:answer' ||
@@ -179,27 +197,10 @@ async function ensureOfficeSeed() {
   }
 
   try {
-    await OfficeModel.findOneAndUpdate(
-      { officeId: config.officeId },
-      {
-        officeId: config.officeId,
-        name: 'Main Office',
-        bounds: {
-          width: config.worldWidth,
-          height: config.worldHeight,
-        },
-        location: {
-          type: 'Point',
-          coordinates: [0, 0],
-        },
-        members: [],
-      },
-      {
-        upsert: true,
-        new: true,
-        setDefaultsOnInsert: true,
-      },
-    );
+    await seedOfficePersistence(config.officeId, { model: OfficeModel });
+    logInfo('Mongo office seed and sound-blocking obstacles initialized', {
+      officeId: config.officeId,
+    });
   } catch (error) {
     logInfo('Mongo office seed failed', { error: error.message });
   }
@@ -269,15 +270,235 @@ app.get('/api/health', async (_req, res) => {
   });
 });
 
-app.get('/api/offices/:officeId', (_req, res) => {
+app.get('/api/offices/:officeId', async (_req, res) => {
   const officeId = _req.params.officeId || config.officeId;
+  const officeDoc = await getOfficeWithLayout(officeId, { model: OfficeModel });
+  const participants = getRoomMembers(officeId);
+
   res.json({
     officeId,
-    participants: getRoomMembers(officeId),
-    bounds: {
+    name: officeDoc?.name || 'Main Office',
+    bounds: officeDoc?.bounds || {
       width: config.worldWidth,
       height: config.worldHeight,
     },
+    participants,
+    layout: officeDoc?.layout || {},
+    furnitureObstacles: officeDoc?.furnitureObstacles || [],
+    obstacles: (officeDoc?.furnitureObstacles || []).map((o) => ({
+      id: o.id,
+      name: o.name,
+      type: o.type,
+      x: o.x,
+      y: o.y,
+      width: o.width,
+      height: o.height,
+      blocksSound: o.blocksSound,
+      soundAttenuationDb: o.soundAttenuationDb,
+      soundOcclusionFactor: o.soundOcclusionFactor,
+    })),
+    version: officeDoc?.version || 1,
+    dbStatus: dbState.status,
+  });
+});
+
+// Room Persistence REST API: Retrieve office blueprint layout and sound-blocking obstacles
+app.get('/api/offices/:officeId/layout', async (req, res) => {
+  const officeId = req.params.officeId || config.officeId;
+  const officeDoc = await getOfficeWithLayout(officeId, { model: OfficeModel });
+
+  res.json({
+    success: true,
+    officeId,
+    name: officeDoc?.name || 'Main Office',
+    bounds: officeDoc?.bounds || { width: 1440, height: 894 },
+    layout: officeDoc?.layout || {},
+    furnitureObstacles: officeDoc?.furnitureObstacles || [],
+    soundBlockingObstacles: (officeDoc?.furnitureObstacles || []).filter(
+      (obs) => obs.blocksSound === true,
+    ),
+    version: officeDoc?.version || 1,
+  });
+});
+
+// Room Persistence REST API: Save or update office layout and sound-blocking obstacles into MongoDB
+app.post('/api/offices/:officeId/layout', async (req, res) => {
+  const officeId = req.params.officeId || config.officeId;
+  const { name, bounds, layout, furnitureObstacles } = req.body || {};
+
+  const saved = await saveOfficeLayout(
+    officeId,
+    { name, bounds, layout, furnitureObstacles },
+    { model: OfficeModel },
+  );
+
+  // Broadcast layout update to active participants
+  io.to(officeId).emit('office:layout:updated', {
+    officeId,
+    layout: saved.layout,
+    furnitureObstacles: saved.furnitureObstacles,
+    version: saved.version,
+  });
+
+  // Cross-node broadcast via Redis Pub/Sub
+  redisService.publishEvent(`proxispeak:room:${officeId}`, 'office:layout:updated', {
+    officeId,
+    layout: saved.layout,
+    furnitureObstacles: saved.furnitureObstacles,
+    version: saved.version,
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Office layout and furniture obstacles successfully saved to MongoDB.',
+    office: saved,
+  });
+});
+
+app.put('/api/offices/:officeId/layout', async (req, res) => {
+  const officeId = req.params.officeId || config.officeId;
+  const { name, bounds, layout, furnitureObstacles } = req.body || {};
+
+  const saved = await saveOfficeLayout(
+    officeId,
+    { name, bounds, layout, furnitureObstacles },
+    { model: OfficeModel },
+  );
+
+  io.to(officeId).emit('office:layout:updated', {
+    officeId,
+    layout: saved.layout,
+    furnitureObstacles: saved.furnitureObstacles,
+    version: saved.version,
+  });
+
+  redisService.publishEvent(`proxispeak:room:${officeId}`, 'office:layout:updated', {
+    officeId,
+    layout: saved.layout,
+    furnitureObstacles: saved.furnitureObstacles,
+    version: saved.version,
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Office layout and furniture obstacles successfully updated in MongoDB.',
+    office: saved,
+  });
+});
+
+// Room Persistence REST API: Query furniture obstacles (supporting ?blocksSound=true)
+app.get('/api/offices/:officeId/obstacles', async (req, res) => {
+  const officeId = req.params.officeId || config.officeId;
+  let blocksSound = null;
+  if (req.query.blocksSound === 'true') blocksSound = true;
+  if (req.query.blocksSound === 'false') blocksSound = false;
+
+  const obstacles = await getOfficeObstacles(officeId, {
+    blocksSound,
+    model: OfficeModel,
+  });
+
+  res.json({
+    success: true,
+    officeId,
+    filter: { blocksSound },
+    count: obstacles.length,
+    obstacles,
+  });
+});
+
+// Room Persistence REST API: Add or bulk save furniture obstacles into MongoDB
+app.post('/api/offices/:officeId/obstacles', async (req, res) => {
+  const officeId = req.params.officeId || config.officeId;
+  const payload = req.body;
+
+  if (Array.isArray(payload)) {
+    const savedList = await saveOfficeObstaclesBulk(officeId, payload, { model: OfficeModel });
+    io.to(officeId).emit('office:layout:updated', { officeId, furnitureObstacles: savedList });
+    redisService.publishEvent(`proxispeak:room:${officeId}`, 'office:layout:updated', {
+      officeId,
+      furnitureObstacles: savedList,
+    });
+    return res.status(201).json({
+      success: true,
+      count: savedList.length,
+      obstacles: savedList,
+    });
+  }
+
+  const saved = await saveOfficeObstacle(officeId, payload, { model: OfficeModel });
+  io.to(officeId).emit('office:obstacle:added', { officeId, obstacle: saved });
+  redisService.publishEvent(`proxispeak:room:${officeId}`, 'office:obstacle:added', {
+    officeId,
+    obstacle: saved,
+  });
+
+  return res.status(201).json({
+    success: true,
+    obstacle: saved,
+  });
+});
+
+// Room Persistence REST API: Update an individual furniture obstacle
+app.put('/api/offices/:officeId/obstacles/:obstacleId', async (req, res) => {
+  const officeId = req.params.officeId || config.officeId;
+  const obstacleId = req.params.obstacleId;
+  const payload = { ...req.body, id: obstacleId };
+
+  const updated = await saveOfficeObstacle(officeId, payload, { model: OfficeModel });
+  io.to(officeId).emit('office:obstacle:updated', { officeId, obstacle: updated });
+  redisService.publishEvent(`proxispeak:room:${officeId}`, 'office:obstacle:updated', {
+    officeId,
+    obstacle: updated,
+  });
+
+  res.json({
+    success: true,
+    obstacle: updated,
+  });
+});
+
+// Room Persistence REST API: Delete a furniture obstacle from MongoDB
+app.delete('/api/offices/:officeId/obstacles/:obstacleId', async (req, res) => {
+  const officeId = req.params.officeId || config.officeId;
+  const obstacleId = req.params.obstacleId;
+
+  await deleteOfficeObstacle(officeId, obstacleId, { model: OfficeModel });
+  io.to(officeId).emit('office:obstacle:removed', { officeId, obstacleId });
+  redisService.publishEvent(`proxispeak:room:${officeId}`, 'office:obstacle:removed', {
+    officeId,
+    obstacleId,
+  });
+
+  res.json({
+    success: true,
+    message: `Obstacle '${obstacleId}' removed from office '${officeId}' in MongoDB.`,
+    obstacleId,
+  });
+});
+
+// Room Persistence REST API: Reset office blueprint and obstacles to default in MongoDB
+app.post('/api/offices/:officeId/reset', async (req, res) => {
+  const officeId = req.params.officeId || config.officeId;
+  const resetOffice = await resetOfficeLayout(officeId, { model: OfficeModel });
+
+  io.to(officeId).emit('office:layout:updated', {
+    officeId,
+    layout: resetOffice.layout,
+    furnitureObstacles: resetOffice.furnitureObstacles,
+    version: resetOffice.version,
+  });
+  redisService.publishEvent(`proxispeak:room:${officeId}`, 'office:layout:updated', {
+    officeId,
+    layout: resetOffice.layout,
+    furnitureObstacles: resetOffice.furnitureObstacles,
+    version: resetOffice.version,
+  });
+
+  res.json({
+    success: true,
+    message: `Office '${officeId}' reset to default architectural layout and sound-blocking obstacles.`,
+    office: resetOffice,
   });
 });
 
@@ -719,6 +940,79 @@ io.on('connection', (socket) => {
         },
       });
     }
+  });
+
+  // Room Persistence Socket.io Signaling: Layout & Sound-Blocking Furniture Obstacles
+  socket.on('office:layout:save', async (payload, callback) => {
+    const user = activeUsers.get(socket.id);
+    const officeId = String(payload?.officeId || user?.officeId || config.officeId).trim();
+    const updated = await saveOfficeLayout(officeId, payload || {}, { model: OfficeModel });
+
+    io.to(officeId).emit('office:layout:updated', {
+      officeId,
+      layout: updated.layout,
+      furnitureObstacles: updated.furnitureObstacles,
+      version: updated.version,
+    });
+    redisService.publishEvent(`proxispeak:room:${officeId}`, 'office:layout:updated', {
+      officeId,
+      layout: updated.layout,
+      furnitureObstacles: updated.furnitureObstacles,
+      version: updated.version,
+    });
+
+    if (typeof callback === 'function') callback({ success: true, office: updated });
+  });
+
+  socket.on('office:obstacle:add', async (payload, callback) => {
+    const user = activeUsers.get(socket.id);
+    const officeId = String(payload?.officeId || user?.officeId || config.officeId).trim();
+    const obstacle = payload?.obstacle || payload;
+    const saved = await saveOfficeObstacle(officeId, obstacle, { model: OfficeModel });
+
+    io.to(officeId).emit('office:obstacle:added', { officeId, obstacle: saved });
+    redisService.publishEvent(`proxispeak:room:${officeId}`, 'office:obstacle:added', {
+      officeId,
+      obstacle: saved,
+    });
+
+    if (typeof callback === 'function') callback({ success: true, obstacle: saved });
+  });
+
+  socket.on('office:obstacle:remove', async (payload, callback) => {
+    const user = activeUsers.get(socket.id);
+    const officeId = String(payload?.officeId || user?.officeId || config.officeId).trim();
+    const obstacleId = payload?.obstacleId || payload?.id;
+
+    await deleteOfficeObstacle(officeId, obstacleId, { model: OfficeModel });
+    io.to(officeId).emit('office:obstacle:removed', { officeId, obstacleId });
+    redisService.publishEvent(`proxispeak:room:${officeId}`, 'office:obstacle:removed', {
+      officeId,
+      obstacleId,
+    });
+
+    if (typeof callback === 'function') callback({ success: true, obstacleId });
+  });
+
+  socket.on('office:layout:reset', async (payload, callback) => {
+    const user = activeUsers.get(socket.id);
+    const officeId = String(payload?.officeId || user?.officeId || config.officeId).trim();
+    const resetOffice = await resetOfficeLayout(officeId, { model: OfficeModel });
+
+    io.to(officeId).emit('office:layout:updated', {
+      officeId,
+      layout: resetOffice.layout,
+      furnitureObstacles: resetOffice.furnitureObstacles,
+      version: resetOffice.version,
+    });
+    redisService.publishEvent(`proxispeak:room:${officeId}`, 'office:layout:updated', {
+      officeId,
+      layout: resetOffice.layout,
+      furnitureObstacles: resetOffice.furnitureObstacles,
+      version: resetOffice.version,
+    });
+
+    if (typeof callback === 'function') callback({ success: true, office: resetOffice });
   });
 
   socket.on('disconnect', () => {

@@ -6,6 +6,8 @@ import {
   NotificationsModal,
   HelpModal,
   LeaveConfirmModal,
+  QuickToolsModal,
+  LayoutPersistenceModal,
 } from './OfficeModals';
 
 describe('SettingsModal WebRTC & Audio Configuration', () => {
@@ -165,5 +167,85 @@ describe('Other Office Modals', () => {
     fireEvent.click(screen.getByRole('button', { name: /leave office/i }));
 
     expect(handleConfirm).toHaveBeenCalled();
+  });
+
+  it('renders QuickToolsModal and triggers onOpenLayoutPersistence', () => {
+    const handleOpenLayout = vi.fn();
+    const handleClose = vi.fn();
+
+    render(
+      <QuickToolsModal
+        isOpen={true}
+        onClose={handleClose}
+        onOpenLayoutPersistence={handleOpenLayout}
+      />,
+    );
+
+    expect(screen.getByText(/office layout & sound obstacles/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByText(/office layout & sound obstacles/i));
+
+    expect(handleOpenLayout).toHaveBeenCalled();
+    expect(handleClose).toHaveBeenCalled();
+  });
+
+  it('renders LayoutPersistenceModal and triggers save, add, and toggle actions', async () => {
+    const mockObstacles = [
+      {
+        id: 'desk-1',
+        name: 'Focus Pod Desk A',
+        type: 'desk',
+        x: 100,
+        y: 100,
+        width: 80,
+        height: 60,
+        blocksSound: true,
+      },
+      {
+        id: 'partition-1',
+        name: 'Acoustic Glass Divider',
+        type: 'partition',
+        x: 200,
+        y: 100,
+        width: 140,
+        height: 20,
+        blocksSound: true,
+      },
+    ];
+
+    const handleSave = vi.fn().mockResolvedValue({});
+    const handleAdd = vi.fn();
+    const handleToggle = vi.fn();
+    const handleReset = vi.fn();
+
+    render(
+      <LayoutPersistenceModal
+        isOpen={true}
+        officeId="test-office"
+        obstacles={mockObstacles}
+        onSaveLayout={handleSave}
+        onAddObstacle={handleAdd}
+        onToggleSoundBlocking={handleToggle}
+        onResetLayout={handleReset}
+      />,
+    );
+
+    expect(screen.getByText(/mongodb office persistence active/i)).toBeInTheDocument();
+    expect(screen.getByText('Focus Pod Desk A')).toBeInTheDocument();
+    expect(screen.getByText('Acoustic Glass Divider')).toBeInTheDocument();
+
+    // Toggle sound blocking
+    const toggleBtns = screen.getAllByRole('button', { name: /blocks sound/i });
+    fireEvent.click(toggleBtns[0]);
+    expect(handleToggle).toHaveBeenCalledWith('desk-1');
+
+    // Save to MongoDB
+    const saveBtn = screen.getByRole('button', { name: /save layout & obstacles to mongodb/i });
+    fireEvent.click(saveBtn);
+    expect(handleSave).toHaveBeenCalled();
+
+    // Reset to blueprint
+    const resetBtn = screen.getByRole('button', { name: /reset to default blueprint/i });
+    fireEvent.click(resetBtn);
+    expect(handleReset).toHaveBeenCalled();
   });
 });

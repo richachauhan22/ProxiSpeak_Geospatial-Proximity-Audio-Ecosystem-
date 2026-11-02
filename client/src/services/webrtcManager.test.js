@@ -159,6 +159,16 @@ describe('Spatial Audio Math Calculations', () => {
     // Direct line between (100, 100) and (400, 100) passes through wall at x=250..270, y=50..150
     expect(calculateObstacleOcclusion(p1, p2, wall, 0.5)).toBe(0.5);
 
+    // If obstacle has blocksSound: false, sound passes through without attenuation
+    const nonSoundBlockingWall = [{ x: 250, y: 50, width: 20, height: 100, blocksSound: false }];
+    expect(calculateObstacleOcclusion(p1, p2, nonSoundBlockingWall, 0.5)).toBe(1.0);
+
+    // If obstacle has custom soundOcclusionFactor, it uses that attenuation factor
+    const customDampenedWall = [
+      { x: 250, y: 50, width: 20, height: 100, blocksSound: true, soundOcclusionFactor: 0.25 },
+    ];
+    expect(calculateObstacleOcclusion(p1, p2, customDampenedWall, 0.5)).toBe(0.25);
+
     // If wall is far away, no obstruction
     const farWall = [{ x: 500, y: 500, width: 20, height: 100 }];
     expect(calculateObstacleOcclusion(p1, p2, farWall, 0.5)).toBe(1.0);
@@ -620,6 +630,28 @@ describe('WebRTCManager Core Audio & Peer Management', () => {
 
     const peer = manager.peers.get('peer-alice');
     expect(peer.isOccluded).toBe(true);
+
+    manager.destroy();
+  });
+
+  it('stores and updates sound-blocking furniture obstacles using setObstacles', () => {
+    const manager = new WebRTCManager();
+    const soundBlockers = [
+      { id: 'obs-1', x: 150, y: 50, width: 20, height: 100, blocksSound: true },
+    ];
+    manager.setObstacles(soundBlockers);
+    expect(manager.obstacles.length).toBe(1);
+    expect(manager.obstacles[0].blocksSound).toBe(true);
+
+    manager.createPeer('peer-alice', false);
+    manager.peers.get('peer-alice').pc.ontrack({
+      streams: [{ id: 'stream-alice' }],
+      track: { kind: 'audio' },
+    });
+
+    // When called without passing obstacles explicitly, uses stored this.obstacles
+    manager.updateSpatialAudio({ x: 100, y: 100 }, [{ id: 'peer-alice', x: 200, y: 100 }]);
+    expect(manager.peers.get('peer-alice').isOccluded).toBe(true);
 
     manager.destroy();
   });

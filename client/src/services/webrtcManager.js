@@ -123,7 +123,7 @@ function lineSegmentsIntersect(p1, p2, p3, p4) {
 }
 
 /**
- * Checks if line-of-sight between two avatars is obstructed by any obstacle/partition
+ * Checks if line-of-sight between two avatars is obstructed by any obstacle/partition (which blocks sound)
  */
 export function calculateObstacleOcclusion(pos1, pos2, obstacles = [], occlusionFactor = 0.5) {
   if (!pos1 || !pos2 || !Array.isArray(obstacles) || obstacles.length === 0) {
@@ -132,6 +132,8 @@ export function calculateObstacleOcclusion(pos1, pos2, obstacles = [], occlusion
 
   for (const obs of obstacles) {
     if (!obs || typeof obs.x !== 'number' || typeof obs.y !== 'number') continue;
+    if (obs.blocksSound === false) continue;
+
     const { x, y, width = 0, height = 0 } = obs;
     if (width <= 0 || height <= 0) continue;
 
@@ -146,7 +148,9 @@ export function calculateObstacleOcclusion(pos1, pos2, obstacles = [], occlusion
       lineSegmentsIntersect(pos1, pos2, bottomRight, bottomLeft) ||
       lineSegmentsIntersect(pos1, pos2, bottomLeft, topLeft)
     ) {
-      return occlusionFactor;
+      return typeof obs.soundOcclusionFactor === 'number'
+        ? obs.soundOcclusionFactor
+        : occlusionFactor;
     }
   }
 
@@ -256,6 +260,13 @@ export class WebRTCManager {
     // Active peer connections: Map<peerId, PeerEntry>
     // PeerEntry: { pc, stream, remoteAudio, gainNode, pannerNode, analyserNode, iceQueue, isSpeaking }
     this.peers = new Map();
+
+    // Furniture & room obstacles that block/attenuate sound propagation
+    this.obstacles = Array.isArray(options.obstacles) ? options.obstacles : [];
+  }
+
+  setObstacles(obstacles) {
+    this.obstacles = Array.isArray(obstacles) ? obstacles : [];
   }
 
   setLocalUserId(userId) {
@@ -728,10 +739,12 @@ export class WebRTCManager {
         rolloffFactor,
       });
 
-      // 2. Obstacle Occlusion / Wall Muffling
+      // 2. Obstacle Occlusion / Wall Muffling (sound-blocking furniture & acoustic walls)
       let occlusion = 1.0;
-      if (occlusionEnabled && Array.isArray(obstacles) && obstacles.length > 0) {
-        occlusion = calculateObstacleOcclusion(localPos, participant, obstacles);
+      const activeObstacles =
+        Array.isArray(obstacles) && obstacles.length > 0 ? obstacles : this.obstacles;
+      if (occlusionEnabled && Array.isArray(activeObstacles) && activeObstacles.length > 0) {
+        occlusion = calculateObstacleOcclusion(localPos, participant, activeObstacles);
         volume *= occlusion;
       }
 

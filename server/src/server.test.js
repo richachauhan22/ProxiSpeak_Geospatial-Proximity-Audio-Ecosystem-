@@ -6,6 +6,15 @@ import {
 } from './userLocationSchema.js';
 import { WEBRTC_PROXIMITY_RADIUS } from './server.js';
 import { validateVisualGraphPayload } from './graphValidator.js';
+import {
+  getOfficeWithLayout,
+  saveOfficeLayout,
+  getOfficeObstacles,
+  saveOfficeObstacle,
+  deleteOfficeObstacle,
+  resetOfficeLayout,
+  inMemoryOffices,
+} from './officePersistence.js';
 
 function validateDisplayName(value) {
   const trimmed = typeof value === 'string' ? value.trim() : '';
@@ -394,5 +403,130 @@ describe('Graph Serialization Backend Ingestion & REST Route Handlers', () => {
     expect(badRes.status).toBe(400);
     expect(badRes.body.success).toBe(false);
     expect(badRes.body.errors[0]).toMatch(/JSON syntax error/);
+  });
+});
+
+describe('Room Persistence: Office Layout & Sound-Blocking Furniture Obstacles Backend Integration', () => {
+  const officeId = 'test-room-persistence';
+
+  it('persists and retrieves office layouts and sound-blocking furniture obstacles', async () => {
+    // 1. Initially retrieve default layout
+    const initial = await getOfficeWithLayout(officeId);
+    expect(initial.officeId).toBe(officeId);
+    expect(initial.furnitureObstacles.length).toBeGreaterThan(0);
+
+    // 2. Persist updated layout with specific sound-blocking obstacle
+    const customObstacles = [
+      {
+        id: 'obs-acoustic-wall-1',
+        name: 'Acoustic Sound Barrier Wall',
+        type: 'partition',
+        x: 400,
+        y: 300,
+        width: 160,
+        height: 30,
+        blocksSound: true,
+        soundAttenuationDb: -22,
+        soundOcclusionFactor: 0.3,
+        material: 'acoustic-fabric',
+      },
+      {
+        id: 'obs-open-archway-1',
+        name: 'Open Floor Archway',
+        type: 'custom',
+        x: 600,
+        y: 300,
+        width: 100,
+        height: 30,
+        blocksSound: false,
+        soundAttenuationDb: 0,
+        soundOcclusionFactor: 1.0,
+      },
+    ];
+
+    const saved = await saveOfficeLayout(officeId, {
+      name: 'Acoustic Innovation Floor',
+      bounds: { width: 1440, height: 894 },
+      furnitureObstacles: customObstacles,
+    });
+
+    expect(saved.name).toBe('Acoustic Innovation Floor');
+    expect(saved.furnitureObstacles.length).toBe(2);
+
+    // 3. Query all vs sound-blocking obstacles
+    const allObstacles = await getOfficeObstacles(officeId, {});
+    expect(allObstacles.length).toBe(2);
+
+    const soundBlocking = await getOfficeObstacles(officeId, { blocksSound: true });
+    expect(soundBlocking.length).toBe(1);
+    expect(soundBlocking[0].id).toBe('obs-acoustic-wall-1');
+    expect(soundBlocking[0].blocksSound).toBe(true);
+    expect(soundBlocking[0].soundAttenuationDb).toBe(-22);
+
+    // 4. Add individual sound-blocking obstacle
+    const added = await saveOfficeObstacle(officeId, {
+      id: 'obs-desk-exec-1',
+      name: 'Executive Sound-Blocking Desk',
+      type: 'desk',
+      x: 800,
+      y: 400,
+      width: 100,
+      height: 50,
+      blocksSound: true,
+      soundAttenuationDb: -12,
+    });
+    expect(added.id).toBe('obs-desk-exec-1');
+    expect(added.blocksSound).toBe(true);
+
+    const updatedList = await getOfficeObstacles(officeId, { blocksSound: true });
+    expect(updatedList.length).toBe(2);
+
+    // 5. Delete an obstacle
+    await deleteOfficeObstacle(officeId, 'obs-acoustic-wall-1');
+    const afterDelete = await getOfficeObstacles(officeId, {});
+    expect(afterDelete.some((o) => o.id === 'obs-acoustic-wall-1')).toBe(false);
+
+    // 6. Reset office back to default blueprint
+    const reset = await resetOfficeLayout(officeId);
+    expect(reset.furnitureObstacles.length).toBeGreaterThanOrEqual(15);
+  });
+
+  it('handles Socket.io layout and obstacle signaling events correctly', () => {
+    const mockEmit = vi.fn();
+    const mockTo = vi.fn(() => ({ emit: mockEmit }));
+    const mockIo = { to: mockTo };
+    const mockRedis = { publishEvent: vi.fn() };
+
+    function handleLayoutSaveEvent(socketOfficeId, payload) {
+      const officeIdToUse = payload.officeId || socketOfficeId;
+      mockIo.to(officeIdToUse).emit('office:layout:updated', {
+        officeId: officeIdToUse,
+        furnitureObstacles: payload.furnitureObstacles,
+      });
+      mockRedis.publishEvent(`proxispeak:room:${officeIdToUse}`, 'office:layout:updated', {
+        officeId: officeIdToUse,
+        furnitureObstacles: payload.furnitureObstacles,
+      });
+    }
+
+    handleLayoutSaveEvent('room-socket-1', {
+      officeId: 'room-socket-1',
+      furnitureObstacles: [
+        { id: 'desk-1', name: 'Desk 1', blocksSound: true },
+      ],
+    });
+
+    expect(mockTo).toHaveBeenCalledWith('room-socket-1');
+    expect(mockEmit).toHaveBeenCalledWith('office:layout:updated', expect.objectContaining({
+      officeId: 'room-socket-1',
+      furnitureObstacles: expect.arrayContaining([
+        expect.objectContaining({ id: 'desk-1', blocksSound: true }),
+      ]),
+    }));
+    expect(mockRedis.publishEvent).toHaveBeenCalledWith(
+      'proxispeak:room:room-socket-1',
+      'office:layout:updated',
+      expect.anything(),
+    );
   });
 });

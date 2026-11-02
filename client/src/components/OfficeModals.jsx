@@ -835,10 +835,16 @@ export function HelpModal({ isOpen, onClose }) {
   );
 }
 
-export function QuickToolsModal({ isOpen, onClose }) {
+export function QuickToolsModal({ isOpen, onClose, onOpenLayoutPersistence }) {
   if (!isOpen) return null;
 
   const tools = [
+    {
+      title: 'Office Layout & Sound Obstacles',
+      desc: 'Persist floor layouts and sound-blocking furniture into MongoDB',
+      icon: '🏛️',
+      action: 'layout-persistence',
+    },
     { title: 'Interactive Whiteboard', desc: 'Collaborative sketching canvas for brainstorming', icon: '🎨' },
     { title: 'Sticky Notes Wall', desc: 'Pin thoughts, tasks and feedback to this floor', icon: '📝' },
     { title: 'Screen Broadcast Pod', desc: 'Share your screen with the entire floor', icon: '🖥️' },
@@ -870,6 +876,9 @@ export function QuickToolsModal({ isOpen, onClose }) {
                 onClick={() => {
                   sounds.playClick();
                   onClose();
+                  if (t.action === 'layout-persistence' && onOpenLayoutPersistence) {
+                    onOpenLayoutPersistence();
+                  }
                 }}
               >
                 <span className="tool-icon">{t.icon}</span>
@@ -879,6 +888,542 @@ export function QuickToolsModal({ isOpen, onClose }) {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * LayoutPersistenceModal
+ * UI interface for managing and persisting office room layout blueprints
+ * and sound-blocking furniture obstacles directly into MongoDB.
+ */
+export function LayoutPersistenceModal({
+  isOpen,
+  onClose,
+  officeId = 'main-office',
+  obstacles = [],
+  onSaveLayout,
+  onAddObstacle,
+  onRemoveObstacle,
+  onToggleSoundBlocking,
+  onResetLayout,
+}) {
+  const [newObstacle, setNewObstacle] = useState({
+    name: 'Acoustic Sound Barrier',
+    type: 'partition',
+    x: 500,
+    y: 400,
+    width: 120,
+    height: 40,
+    blocksSound: true,
+    soundAttenuationDb: -18,
+    soundOcclusionFactor: 0.35,
+    material: 'acoustic-fabric',
+  });
+  const [filterSoundBlockingOnly, setFilterSoundBlockingOnly] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
+
+  if (!isOpen) return null;
+
+  const displayedObstacles = filterSoundBlockingOnly
+    ? obstacles.filter((o) => o.blocksSound !== false)
+    : obstacles;
+
+  const soundBlockingCount = obstacles.filter((o) => o.blocksSound !== false).length;
+
+  const handleCreateObstacle = (e) => {
+    e.preventDefault();
+    if (!newObstacle.name.trim()) return;
+
+    const obstacleToAdd = {
+      id: `custom-obs-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      name: newObstacle.name.trim(),
+      type: newObstacle.type,
+      x: Number(newObstacle.x),
+      y: Number(newObstacle.y),
+      width: Number(newObstacle.width),
+      height: Number(newObstacle.height),
+      blocksSound: Boolean(newObstacle.blocksSound),
+      soundAttenuationDb: Number(newObstacle.soundAttenuationDb),
+      soundOcclusionFactor: Number(newObstacle.soundOcclusionFactor),
+      material: newObstacle.material,
+    };
+
+    if (onAddObstacle) {
+      onAddObstacle(obstacleToAdd);
+    }
+    sounds.playButtonClick();
+  };
+
+  const handleSaveToMongo = async () => {
+    if (!onSaveLayout) return;
+    setIsSaving(true);
+    try {
+      await onSaveLayout();
+      setSaveSuccessMsg('Layout & sound-blocking obstacles saved to MongoDB successfully!');
+      setTimeout(() => setSaveSuccessMsg(''), 3500);
+      sounds.playFloorChime();
+    } catch (err) {
+      setSaveSuccessMsg(`Failed to save: ${err.message}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="ovice-modal-overlay" onClick={onClose}>
+      <div
+        className="ovice-modal modern-modal glass-panel"
+        style={{ maxWidth: '780px', width: '92%' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="modal-header">
+          <div className="modal-title-wrap">
+            <span className="modal-icon">🏛️</span>
+            <div>
+              <h3>Room Persistence & Sound-Blocking Obstacles</h3>
+              <span className="modal-subtitle">
+                Save office layouts and acoustic furniture barriers into MongoDB
+              </span>
+            </div>
+          </div>
+          <button type="button" className="modal-close" onClick={onClose}>
+            ✕
+          </button>
+        </div>
+
+        <div className="modal-body" style={{ maxHeight: '72vh', overflowY: 'auto', padding: '1.2rem' }}>
+          {/* MongoDB Status Banner */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '0.75rem 1rem',
+              backgroundColor: 'rgba(16, 185, 129, 0.1)',
+              border: '1px solid rgba(16, 185, 129, 0.3)',
+              borderRadius: '8px',
+              marginBottom: '1rem',
+            }}
+          >
+            <div>
+              <strong style={{ color: '#10b981' }}>🍃 MongoDB Office Persistence Active</strong>
+              <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.85rem', color: '#94a3b8' }}>
+                Office ID: <code>{officeId}</code> • Floor Dimensions: 1440 × 894 px
+              </p>
+            </div>
+            <span
+              style={{
+                backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                color: '#10b981',
+                padding: '4px 10px',
+                borderRadius: '12px',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+              }}
+            >
+              Collection: offices
+            </span>
+          </div>
+
+          {saveSuccessMsg && (
+            <div
+              style={{
+                padding: '0.6rem 1rem',
+                backgroundColor: 'rgba(99, 102, 241, 0.15)',
+                border: '1px solid #6366f1',
+                borderRadius: '6px',
+                marginBottom: '1rem',
+                color: '#818cf8',
+                fontSize: '0.9rem',
+              }}
+            >
+              ✓ {saveSuccessMsg}
+            </div>
+          )}
+
+          {/* Stats Bar */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+              gap: '0.75rem',
+              marginBottom: '1.25rem',
+            }}
+          >
+            <div
+              style={{
+                background: 'rgba(255, 255, 255, 0.03)',
+                padding: '0.75rem',
+                borderRadius: '8px',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+              }}
+            >
+              <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Total Obstacles</div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#f8fafc' }}>
+                {obstacles.length}
+              </div>
+            </div>
+            <div
+              style={{
+                background: 'rgba(255, 255, 255, 0.03)',
+                padding: '0.75rem',
+                borderRadius: '8px',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+              }}
+            >
+              <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Sound-Blocking</div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#38bdf8' }}>
+                {soundBlockingCount}
+              </div>
+            </div>
+            <div
+              style={{
+                background: 'rgba(255, 255, 255, 0.03)',
+                padding: '0.75rem',
+                borderRadius: '8px',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+              }}
+            >
+              <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Audio Attenuation</div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#f59e0b' }}>
+                -10dB to -24dB
+              </div>
+            </div>
+          </div>
+
+          {/* Add New Furniture Obstacle Form */}
+          <form
+            onSubmit={handleCreateObstacle}
+            style={{
+              background: 'rgba(30, 41, 59, 0.4)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '8px',
+              padding: '1rem',
+              marginBottom: '1.5rem',
+            }}
+          >
+            <h4 style={{ margin: '0 0 0.8rem 0', color: '#f1f5f9', fontSize: '1rem' }}>
+              ➕ Add Furniture Obstacle (Blocks Sound)
+            </h4>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+                gap: '0.6rem',
+                marginBottom: '0.8rem',
+              }}
+            >
+              <div>
+                <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block' }}>Name</label>
+                <input
+                  type="text"
+                  value={newObstacle.name}
+                  onChange={(e) => setNewObstacle({ ...newObstacle, name: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '6px 8px',
+                    borderRadius: '4px',
+                    border: '1px solid #334155',
+                    background: '#0f172a',
+                    color: '#fff',
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block' }}>Type</label>
+                <select
+                  value={newObstacle.type}
+                  onChange={(e) => setNewObstacle({ ...newObstacle, type: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '6px 8px',
+                    borderRadius: '4px',
+                    border: '1px solid #334155',
+                    background: '#0f172a',
+                    color: '#fff',
+                  }}
+                >
+                  <option value="partition">Partition</option>
+                  <option value="glass_wall">Glass Wall</option>
+                  <option value="acoustic_baffle">Acoustic Baffle</option>
+                  <option value="desk">Desk</option>
+                  <option value="table">Conference Table</option>
+                  <option value="sofa">Sofa</option>
+                  <option value="counter">Espresso Counter</option>
+                  <option value="custom">Custom Obstacle</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block' }}>X (px)</label>
+                <input
+                  type="number"
+                  value={newObstacle.x}
+                  onChange={(e) => setNewObstacle({ ...newObstacle, x: Number(e.target.value) })}
+                  style={{
+                    width: '100%',
+                    padding: '6px 8px',
+                    borderRadius: '4px',
+                    border: '1px solid #334155',
+                    background: '#0f172a',
+                    color: '#fff',
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block' }}>Y (px)</label>
+                <input
+                  type="number"
+                  value={newObstacle.y}
+                  onChange={(e) => setNewObstacle({ ...newObstacle, y: Number(e.target.value) })}
+                  style={{
+                    width: '100%',
+                    padding: '6px 8px',
+                    borderRadius: '4px',
+                    border: '1px solid #334155',
+                    background: '#0f172a',
+                    color: '#fff',
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block' }}>Width</label>
+                <input
+                  type="number"
+                  value={newObstacle.width}
+                  onChange={(e) => setNewObstacle({ ...newObstacle, width: Number(e.target.value) })}
+                  style={{
+                    width: '100%',
+                    padding: '6px 8px',
+                    borderRadius: '4px',
+                    border: '1px solid #334155',
+                    background: '#0f172a',
+                    color: '#fff',
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block' }}>Height</label>
+                <input
+                  type="number"
+                  value={newObstacle.height}
+                  onChange={(e) => setNewObstacle({ ...newObstacle, height: Number(e.target.value) })}
+                  style={{
+                    width: '100%',
+                    padding: '6px 8px',
+                    borderRadius: '4px',
+                    border: '1px solid #334155',
+                    background: '#0f172a',
+                    color: '#fff',
+                  }}
+                />
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '0.75rem',
+              }}
+            >
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem' }}>
+                <input
+                  type="checkbox"
+                  checked={newObstacle.blocksSound}
+                  onChange={(e) => setNewObstacle({ ...newObstacle, blocksSound: e.target.checked })}
+                />
+                <span style={{ color: '#38bdf8', fontWeight: 600 }}>🔇 Blocks Sound Propagation</span>
+              </label>
+
+              <button
+                type="submit"
+                style={{
+                  padding: '7px 16px',
+                  borderRadius: '6px',
+                  background: '#2563eb',
+                  border: 'none',
+                  color: '#fff',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  fontSize: '0.85rem',
+                }}
+              >
+                + Add Obstacle to Floor
+              </button>
+            </div>
+          </form>
+
+          {/* Obstacles List Header & Filter */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '0.6rem',
+            }}
+          >
+            <h4 style={{ margin: 0, color: '#f1f5f9', fontSize: '0.95rem' }}>
+              Office Obstacles ({displayedObstacles.length})
+            </h4>
+            <label style={{ fontSize: '0.8rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <input
+                type="checkbox"
+                checked={filterSoundBlockingOnly}
+                onChange={(e) => setFilterSoundBlockingOnly(e.target.checked)}
+              />
+              Show Sound-Blocking Only
+            </label>
+          </div>
+
+          {/* List of Obstacles */}
+          <div
+            style={{
+              maxHeight: '220px',
+              overflowY: 'auto',
+              borderRadius: '6px',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              background: '#0f172a',
+            }}
+          >
+            {displayedObstacles.length === 0 ? (
+              <div style={{ padding: '1rem', textAlign: 'center', color: '#64748b' }}>
+                No obstacles found matching criteria.
+              </div>
+            ) : (
+              displayedObstacles.map((obs, idx) => (
+                <div
+                  key={obs.id || idx}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '8px 12px',
+                    borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
+                    fontSize: '0.85rem',
+                  }}
+                >
+                  <div>
+                    <strong style={{ color: '#e2e8f0' }}>{obs.name || `Obstacle ${idx + 1}`}</strong>{' '}
+                    <span style={{ color: '#64748b', fontSize: '0.75rem' }}>({obs.type || 'desk'})</span>
+                    <div style={{ color: '#94a3b8', fontSize: '0.75rem' }}>
+                      Position: ({obs.x}, {obs.y}) • Size: {obs.width}×{obs.height}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <button
+                      type="button"
+                      onClick={() => onToggleSoundBlocking && onToggleSoundBlocking(obs.id)}
+                      style={{
+                        padding: '3px 8px',
+                        borderRadius: '4px',
+                        border: 'none',
+                        background: obs.blocksSound !== false ? 'rgba(56, 189, 248, 0.2)' : 'rgba(255, 255, 255, 0.1)',
+                        color: obs.blocksSound !== false ? '#38bdf8' : '#94a3b8',
+                        fontSize: '0.75rem',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                      }}
+                      title="Toggle sound blocking behavior"
+                    >
+                      {obs.blocksSound !== false ? '🔇 Blocks Sound' : 'Passes Sound'}
+                    </button>
+
+                    {onRemoveObstacle && (
+                      <button
+                        type="button"
+                        onClick={() => onRemoveObstacle(obs.id)}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: '#ef4444',
+                          cursor: 'pointer',
+                          fontSize: '0.9rem',
+                          padding: '2px 6px',
+                        }}
+                        title="Delete obstacle"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Modal Footer with MongoDB Save & Reset buttons */}
+        <div
+          style={{
+            padding: '1rem 1.25rem',
+            borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: 'rgba(15, 23, 42, 0.8)',
+          }}
+        >
+          <button
+            type="button"
+            onClick={onResetLayout}
+            style={{
+              padding: '8px 14px',
+              borderRadius: '6px',
+              background: 'rgba(239, 68, 68, 0.15)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              color: '#f87171',
+              cursor: 'pointer',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+            }}
+          >
+            🔄 Reset to Default Blueprint
+          </button>
+
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '6px',
+                background: 'rgba(255, 255, 255, 0.08)',
+                border: 'none',
+                color: '#cbd5e1',
+                cursor: 'pointer',
+                fontSize: '0.85rem',
+              }}
+            >
+              Close
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveToMongo}
+              disabled={isSaving}
+              style={{
+                padding: '8px 20px',
+                borderRadius: '6px',
+                background: '#10b981',
+                border: 'none',
+                color: '#fff',
+                cursor: isSaving ? 'not-allowed' : 'pointer',
+                fontSize: '0.85rem',
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              {isSaving ? 'Saving to MongoDB…' : '💾 Save Layout & Obstacles to MongoDB'}
+            </button>
           </div>
         </div>
       </div>
