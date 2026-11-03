@@ -77,6 +77,7 @@ To scale beyond a single Node.js instance and prevent $O(N^2)$ mesh connection d
   - `$near` queries (`GET /api/offices/:officeId/nearby`) and proximity clustering (`GET /api/offices/:officeId/groups`).
 - **High-Speed Time-Series Telemetry**:
   - MongoDB Time-Series collection schema benchmarking up to 5,000 spatial writes/sec.
+- *Comprehensive Guide*: See [**`docs/ROOM_PERSISTENCE_AND_SPATIAL_ENGINE.md`**](docs/ROOM_PERSISTENCE_AND_SPATIAL_ENGINE.md).
 
 ---
 
@@ -85,6 +86,7 @@ To scale beyond a single Node.js instance and prevent $O(N^2)$ mesh connection d
 ```
 PROXISPEAK/
 ├── docs/                       # Comprehensive Architecture & Technical Guides
+│   ├── ROOM_PERSISTENCE_AND_SPATIAL_ENGINE.md # Room persistence, 3D audio panning, & 60 FPS canvas engine
 │   ├── WEBRTC_AUDIO.md         # WebRTC P2P audio, Web Audio graph, and spatial attenuation math
 │   ├── MESH_SCALING_AND_REDIS.md# Redis Pub/Sub, multi-node scaling, and spatial grid hashing
 │   └── WEEK_WISE_APP_INFO.md   # Chronological development roadmap and milestone breakdown
