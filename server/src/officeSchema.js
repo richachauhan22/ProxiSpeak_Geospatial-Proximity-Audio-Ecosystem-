@@ -1,4 +1,19 @@
+
 import mongoose from 'mongoose';
+
+const layoutObjectSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true },
+    type: { type: String, default: 'furniture' },
+    name: { type: String, default: 'Object' },
+    x: { type: Number, required: true },
+    y: { type: Number, required: true },
+    width: { type: Number, required: true },
+    height: { type: Number, required: true },
+    blocksSound: { type: Boolean, default: true },
+  },
+  { _id: false },
+);
 
 const officeSchema = new mongoose.Schema(
   {
@@ -16,6 +31,16 @@ const officeSchema = new mongoose.Schema(
     bounds: {
       width: { type: Number, default: 1200 },
       height: { type: Number, default: 760 },
+    },
+    // Saved office layout and furniture positions
+    layout: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
+    // Furniture and other objects that block sound
+    obstacles: {
+      type: [layoutObjectSchema],
+      default: [],
     },
     location: {
       type: {
@@ -42,7 +67,7 @@ officeSchema.index({ location: '2dsphere' });
 
 export const OfficeModel = mongoose.model('Office', officeSchema);
 
-// --- USER LOCATION SCHEMA FOR WEEK 2 ($near QUERIES) ---
+// USER LOCATION SCHEMA FOR GEOSPATIAL QUERIES
 const userLocationSchema = new mongoose.Schema({
   userId: { type: String, required: true, unique: true },
   socketId: { type: String, required: true },
@@ -55,14 +80,13 @@ const userLocationSchema = new mongoose.Schema({
       default: 'Point',
     },
     coordinates: {
-      type: [Number], // [X, Y]
+      type: [Number],
       required: true,
     },
   },
   lastSeen: { type: Date, default: Date.now },
 });
 
-// 2dsphere index guarantees sub-20ms spatial queries
 userLocationSchema.index({ location: '2dsphere' });
 
 export const UserLocationModel = mongoose.model('UserLocation', userLocationSchema);
