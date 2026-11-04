@@ -1,6 +1,81 @@
 # ProxiSpeak: Geospatial Proximity Audio Ecosystem
 
-ProxiSpeak is a spatial audio and collaborative virtual office platform modeled after proximity-based workspace experiences (such as oVice and Gather). Users navigate as customizable 2D avatars in a shared virtual workspace with real-time positional broadcasting, collision detection, and proximity audio cues.
+> **Tagline:** *"Move Closer. Connect Naturally."*
+>
+> ProxiSpeak is a production-quality, real-time virtual office platform where colleagues interact naturally through intelligent proximity-based spatial audio and 2D canvas locomotion.
+
+---
+
+## 🖥️ Complete Frontend Routes & Architecture
+
+The frontend is built with React 18, Vite, HTML5 Canvas API, Web Audio API, WebRTC, and Socket.IO client:
+
+| Route | View | Description |
+|---|---|---|
+| `/` | **Landing Page** | High-conversion marketing showcase featuring hero preview, interactive audio distance simulator, feature cards, Gather vs. Zoom comparison, and FAQs. |
+| `/login` | **User Authentication** | Secure sign-in with remember-me, demo 1-click profiles (Mia, Alex, David), and JWT session persistence. |
+| `/register` | **Workspace Creation** | Company registration, workspace name configuration, and spatial audio permission agreements. |
+| `/forgot-password` | **Account Recovery** | Password recovery flow with immediate user feedback. |
+| `/app` | **Main Dashboard** | Executive overview with live metrics, available virtual offices with capacity badges, active colleagues, and workspace activity pulse. |
+| `/app/office/:officeId` | **Virtual Office Canvas** | The visual centerpiece: 60 FPS HTML5 canvas with WASD/arrow keys, click-to-move, mouse panning/zoom, sound-blocking obstacle raycasting, mobile virtual d-pad, and Web Audio spatial panning. |
+| `/app/people` | **Team Directory** | Filterable colleague directory with search by role/office, real-time speaking indicators, and 1-click teleport/join office actions. |
+| `/app/notifications` | **Notification Center** | Filterable activity center tracking proximity connections, huddles, and soundproof partition changes. |
+| `/app/settings` | **Settings & Preferences** | Audio & Spatial DSP hardware selectors (microphone/speaker), dynamic attenuation curve pickers (linear, exponential, inverse, smoothstep), appearance theme switcher (Light / Dark), and privacy controls. |
+| `/app/profile` | **User Profile** | Customizable avatar characters, color accents, display names, job titles, and status bio. |
+
+---
+
+## 🎨 Visual Design System & Palette
+
+- **Primary Colors:**
+  - Deep Navy: `#101828`
+  - Dark Navy: `#172554`
+  - Primary Indigo: `#6366F1`
+  - Electric Violet: `#8B5CF6`
+  - Soft Purple: `#A78BFA`
+- **Accent & Status:**
+  - Emerald Green: `#10B981` (Online, Active)
+  - Amber Gold: `#F59E0B` (Away, Caution)
+  - Rose Red: `#EF4444` (Muted, Offline)
+  - Teal Cyan: `#14B8A6` (Spatial Audio)
+- **Surfaces:**
+  - Light Background: `#F8FAFC`
+  - Surface Card: `#FFFFFF`
+  - Secondary Surface: `#F1F5F9`
+  - Border: `#E2E8F0`
+- **Responsive Layout:**
+  - Full desktop office viewport with collapsible drawers and HUD.
+  - Tablet/Mobile on-screen directional pad (`MobileControls.jsx`) and touch navigation.
+
+---
+
+## 🚀 Getting Started
+
+### 1. Prerequisites
+- Node.js (v18+)
+- npm or pnpm
+
+### 2. Environment Setup
+Copy the example environment configurations:
+```bash
+cp .env.example .env
+cp client/.env.example client/.env
+```
+
+### 3. Install & Run
+```bash
+# Install dependencies
+npm install
+
+# Run both client and backend concurrently
+npm run dev
+
+# Or run frontend independently
+npm run dev --workspace client
+
+# Run all test suites
+npm test
+```
 
 ---
 

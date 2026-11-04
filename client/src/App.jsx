@@ -2,6 +2,20 @@ import React, { useEffect, useRef, useState } from 'react';
 import OfficeCanvas from './office/OfficeCanvas';
 import JoinOfficePage from './pages/JoinOfficePage';
 import LandingPage from './pages/LandingPage';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import DashboardPage from './pages/DashboardPage';
+import TeamMembersPage from './pages/TeamMembersPage';
+import NotificationsPage from './pages/NotificationsPage';
+import ProfilePage from './pages/ProfilePage';
+import SettingsPage from './pages/SettingsPage';
+import AppLayout from './components/layout/AppLayout';
+import MobileControls from './components/office/MobileControls';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext';
+import { ThemeProvider } from './context/ThemeContext';
+import { BrowserRouter, useNavigate, useLocation } from './lib/react-router-dom';
 import { useSocket } from './hooks/useSocket';
 import { useWebRTC } from './hooks/useWebRTC';
 import OviceHeader from './components/OviceHeader';
@@ -31,17 +45,23 @@ import {
 } from './services/officePersistenceService';
 import { sounds } from './services/soundEffects';
 
-function App() {
+function MainAppRoutes() {
   const joinRequestRef = useRef(null);
   const localUserRef = useRef(null);
   const joinTimeoutRef = useRef(null);
   const toastTimeoutRef = useRef(null);
 
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const [displayName, setDisplayName] = useState('Mia');
   const [avatarColor, setAvatarColor] = useState('#2563eb');
   const [avatarUrl, setAvatarUrl] = useState('/avatar_mia.png');
   const [officeId, setOfficeId] = useState('oVice HQ / C-03');
-  const [joined, setJoined] = useState(() => window.location.pathname === '/office');
+  const [joined, setJoined] = useState(() => {
+    const path = typeof window !== 'undefined' ? window.location.pathname : '/';
+    return path === '/office' || path.startsWith('/app/office');
+  });
   const [localUser, setLocalUser] = useState(() => ({
     ...DEFAULT_LOCAL_USER,
     id: `user-${Math.random().toString(36).substring(2, 9)}`,
@@ -72,12 +92,12 @@ function App() {
   const [whiteboardOpen, setWhiteboardOpen] = useState(false);
   const [broadcastOpen, setBroadcastOpen] = useState(false);
   const [isBroadcasting, setIsBroadcasting] = useState(false);
-  const [lightingMode, setLightingMode] = useState('daylight'); // 'daylight' | 'sunset' | 'studio'
+  const [lightingMode, setLightingMode] = useState('daylight');
   const [proximityDistance, setProximityDistance] = useState(240);
   const [spatialConfig, setSpatialConfig] = useState({
     minDistance: 60,
     maxDistance: 240,
-    attenuationModel: 'linear', // 'linear' | 'exponential' | 'inverse' | 'smoothstep'
+    attenuationModel: 'linear',
     rolloffFactor: 1.0,
     airDamping: true,
     occlusionEnabled: true,
@@ -86,14 +106,10 @@ function App() {
     proximityRadius: 100,
   });
 
-  // Video toggle
   const [isVideoOn, setIsVideoOn] = useState(true);
 
-  const [page, setPage] = useState(() => {
-    if (window.location.pathname === '/office') return 'office';
-    if (window.location.pathname === '/join') return 'join';
-    return 'landing';
-  });
+  // Sync route with current location
+  const currentPath = location.pathname;
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -116,7 +132,9 @@ function App() {
     },
   });
 
-  const isOfficeActive = (joined || page === 'office');
+  const isOfficeActive = Boolean(
+    joined || currentPath === '/office' || currentPath.startsWith('/app/office')
+  );
 
   const {
     localStream,
@@ -152,18 +170,22 @@ function App() {
     }
   }, [webrtcError]);
 
-  const navigate = (nextPage) => {
-    const path = nextPage === 'landing' ? '/' : `/${nextPage}`;
-    if (window.location.pathname !== path) window.history.pushState({}, '', path);
-    setPage(nextPage);
-    if (nextPage === 'office') {
-      setJoined(true);
-    }
-  };
-
   useEffect(() => {
     localUserRef.current = localUser;
   }, [localUser]);
+
+  // Handle URL change from office navigation
+  useEffect(() => {
+    if (currentPath.startsWith('/app/office/')) {
+      const paramOffice = decodeURIComponent(currentPath.replace('/app/office/', ''));
+      if (paramOffice && paramOffice !== officeId) {
+        setOfficeId(paramOffice);
+      }
+      setJoined(true);
+    } else if (currentPath === '/office') {
+      setJoined(true);
+    }
+  }, [currentPath, officeId]);
 
   useEffect(() => {
     const socket = socketRef.current;
@@ -183,7 +205,6 @@ function App() {
       localUserRef.current = mergedUser;
       setLocalUser(mergedUser);
 
-      // Merge real participants with default screenshot teammates
       const userMap = new Map();
       DEFAULT_OFFICE_PARTICIPANTS.forEach((p) => userMap.set(p.id, p));
       (officeUsers || []).forEach((p) => {
@@ -192,9 +213,10 @@ function App() {
       setParticipants([...userMap.values()]);
 
       setJoined(true);
-      setPage('office');
       showToast(`Welcome to ${officeId}!`);
-      if (window.location.pathname !== '/office') window.history.pushState({}, '', '/office');
+      if (window.location.pathname !== '/office' && !window.location.pathname.startsWith('/app/office')) {
+        navigate('/office');
+      }
       setError('');
     };
 
@@ -214,8 +236,7 @@ function App() {
         localUserRef.current = null;
         setJoined(false);
         joinRequestRef.current = null;
-        setPage('landing');
-        if (window.location.pathname !== '/') window.history.pushState({}, '', '/');
+        navigate('/');
       }
     };
 
@@ -239,8 +260,7 @@ function App() {
     const handleOfficeLeft = () => {
       setJoined(false);
       joinRequestRef.current = null;
-      setPage('landing');
-      if (window.location.pathname !== '/') window.history.pushState({}, '', '/');
+      navigate('/');
     };
 
     socket.on('office:joined', handleJoined);
@@ -282,18 +302,8 @@ function App() {
     socket.on('office:obstacle:updated', handleObstacleUpdated);
     socket.on('office:obstacle:removed', handleObstacleRemoved);
 
-    const handlePopState = () => {
-      if (window.location.pathname === '/office' || joined) {
-        setPage('office');
-      } else {
-        setPage(window.location.pathname === '/join' ? 'join' : 'landing');
-      }
-    };
-    window.addEventListener('popstate', handlePopState);
-
     return () => {
       window.clearTimeout(joinTimeoutRef.current);
-      window.removeEventListener('popstate', handlePopState);
       socket.off('office:joined', handleJoined);
       socket.off('avatar:joined', handleAvatarJoined);
       socket.off('avatar:left', handleAvatarLeft);
@@ -305,7 +315,7 @@ function App() {
       socket.off('office:obstacle:updated', handleObstacleUpdated);
       socket.off('office:obstacle:removed', handleObstacleRemoved);
     };
-  }, [joined, displayName, avatarUrl, avatarColor]);
+  }, [joined, displayName, avatarUrl, avatarColor, officeId, navigate]);
 
   const emitJoin = () => {
     const socket = socketRef.current;
@@ -321,12 +331,12 @@ function App() {
 
     window.clearTimeout(joinTimeoutRef.current);
     joinTimeoutRef.current = window.setTimeout(() => {
-      // Local interactive fallback
       setIsJoining(false);
       setJoined(true);
-      setPage('office');
       showToast(`Joined ${officeId}`);
-      if (window.location.pathname !== '/office') window.history.pushState({}, '', '/office');
+      if (window.location.pathname !== '/office' && !window.location.pathname.startsWith('/app/office')) {
+        navigate('/office');
+      }
     }, 1500);
   };
 
@@ -366,10 +376,11 @@ function App() {
     const socket = socketRef.current;
     if (!socket || !socket.connected) {
       setJoined(true);
-      setPage('office');
       setIsJoining(false);
       showToast(`Joined ${officeId}`);
-      if (window.location.pathname !== '/office') window.history.pushState({}, '', '/office');
+      if (window.location.pathname !== '/office' && !window.location.pathname.startsWith('/app/office')) {
+        navigate('/office');
+      }
       return;
     }
 
@@ -388,7 +399,7 @@ function App() {
     localUserRef.current = demoUser;
     setJoined(true);
     showToast('Entered demo office mode');
-    navigate('office');
+    navigate('/office');
   };
 
   const handleLeaveOffice = () => {
@@ -398,7 +409,7 @@ function App() {
     }
     setJoined(false);
     joinRequestRef.current = null;
-    navigate('landing');
+    navigate('/');
   };
 
   const handleLocalMove = (nextPosition) => {
@@ -478,7 +489,6 @@ function App() {
     showToast(`Spatial Sound Profile: ${preset.toUpperCase()}`);
   };
 
-  // Room Persistence: Fetch office layout & sound-blocking furniture obstacles from MongoDB
   useEffect(() => {
     let isMounted = true;
     fetchOfficeLayout(officeId)
@@ -570,23 +580,16 @@ function App() {
     isSpeaking: speakingPeers.has(p.id) || Boolean(p.isSpeaking),
   }));
 
-  return (
-    <div className={`app-shell ${page}-shell modern-theme`}>
-      {/* Floating Toast Notification */}
-      {toastMessage && (
-        <div className="proxi-toast-banner" role="status">
-          <span className="toast-sparkle">✨</span>
-          <span className="toast-content">{toastMessage}</span>
-        </div>
-      )}
+  // Route Rendering Dispatch
+  const renderCurrentView = () => {
+    // 1. Auth routes
+    if (currentPath === '/login') return <LoginPage />;
+    if (currentPath === '/register') return <RegisterPage />;
+    if (currentPath === '/forgot-password') return <ForgotPasswordPage />;
 
-      {page === 'landing' && !joined ? (
-        <LandingPage
-          onEnter={() => navigate('join')}
-          onDirectOffice={handleInstantDemo}
-          onExplore={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}
-        />
-      ) : page === 'join' && !joined ? (
+    // 2. Standalone join screen
+    if (currentPath === '/join' && !joined) {
+      return (
         <JoinOfficePage
           displayName={displayName}
           setDisplayName={setDisplayName}
@@ -597,15 +600,18 @@ function App() {
           officeId={officeId}
           setOfficeId={setOfficeId}
           onSubmit={handleJoinOffice}
-          onBack={() => navigate('landing')}
+          onBack={() => navigate('/')}
           error={error}
           connectionStatus={connectionStatus}
           loading={isJoining}
         />
-      ) : (
-        /* ================= VIRTUAL OFFICE WORKSPACE ================= */
+      );
+    }
+
+    // 3. Virtual Office Workspace (Canvas is centerpiece!)
+    if (currentPath === '/office' || currentPath.startsWith('/app/office') || joined) {
+      return (
         <div className="ovice-office-container modern-office-viewport">
-          {/* 1. Modern Frosted Header */}
           <OviceHeader
             officeId={officeId}
             participantCount={activeParticipants.length + (currentLocalUser ? 1 : 0)}
@@ -628,15 +634,12 @@ function App() {
             participants={activeParticipants}
           />
 
-          {/* 2. Main Floor Workspace */}
           <main className="ovice-main-viewport modern-canvas-holder">
-            {/* Left Floating Floor Selector Widget (4F) */}
             <FloorSelector
               currentFloor={4}
               onFloorChange={(fl) => showToast(`Elevator moved to Floor ${fl}F`)}
             />
 
-            {/* Virtual Office Floor Canvas */}
             <OfficeCanvas
               localUser={currentLocalUser}
               participants={activeParticipants}
@@ -655,7 +658,14 @@ function App() {
               obstacles={officeObstacles}
             />
 
-            {/* Floating Emojis */}
+            {/* Mobile Touch Directional Pad */}
+            <MobileControls
+              onMove={(dx, dy) => {
+                const cur = localUserRef.current;
+                if (cur) handleLocalMove({ x: cur.x + dx, y: cur.y + dy });
+              }}
+            />
+
             {reactions.map((r) => (
               <div
                 key={r.id}
@@ -669,7 +679,6 @@ function App() {
               </div>
             ))}
 
-            {/* Radar Mini-map Overlay */}
             <MiniMapOverlay
               isOpen={miniMapOpen}
               onClose={() => setMiniMapOpen(false)}
@@ -681,7 +690,6 @@ function App() {
               }}
             />
 
-            {/* Bottom Floating Controls Toolbar */}
             <BottomToolbar
               localUser={currentLocalUser}
               zoomLevel={zoomLevel}
@@ -708,14 +716,12 @@ function App() {
               onSpatialPresetChange={handleSpatialPresetChange}
             />
 
-            {/* Interactive Whiteboard Modal */}
             <CollaborativeWhiteboardModal
               isOpen={whiteboardOpen}
               onClose={() => setWhiteboardOpen(false)}
               onSave={() => showToast('Whiteboard snapshot saved')}
             />
 
-            {/* Screen Broadcast Modal */}
             <ScreenBroadcastModal
               isOpen={broadcastOpen}
               onClose={() => setBroadcastOpen(false)}
@@ -729,7 +735,6 @@ function App() {
               }}
             />
 
-            {/* Side Drawers */}
             <ChatDrawer
               isOpen={chatOpen}
               onClose={() => setChatOpen(false)}
@@ -747,7 +752,6 @@ function App() {
               }}
             />
 
-            {/* Modals */}
             <CalendarModal
               isOpen={calendarOpen}
               onClose={() => setCalendarOpen(false)}
@@ -797,9 +801,85 @@ function App() {
             />
           </main>
         </div>
+      );
+    }
+
+    // 4. Main SaaS App views wrapped in AppLayout
+    if (currentPath === '/app') {
+      return (
+        <AppLayout>
+          <DashboardPage />
+        </AppLayout>
+      );
+    }
+
+    if (currentPath === '/app/people') {
+      return (
+        <AppLayout>
+          <TeamMembersPage />
+        </AppLayout>
+      );
+    }
+
+    if (currentPath === '/app/notifications') {
+      return (
+        <AppLayout>
+          <NotificationsPage />
+        </AppLayout>
+      );
+    }
+
+    if (currentPath === '/app/profile') {
+      return (
+        <AppLayout>
+          <ProfilePage />
+        </AppLayout>
+      );
+    }
+
+    if (currentPath === '/app/settings') {
+      return (
+        <AppLayout>
+          <SettingsPage />
+        </AppLayout>
+      );
+    }
+
+    // 5. Default: Marketing Landing Page
+    return (
+      <LandingPage
+        onEnter={() => navigate('/join')}
+        onDirectOffice={handleInstantDemo}
+        onExplore={() => {
+          document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' });
+        }}
+      />
+    );
+  };
+
+  return (
+    <div className={`app-shell modern-theme`}>
+      {toastMessage && (
+        <div className="proxi-toast-banner" role="status">
+          <span className="toast-sparkle">✨</span>
+          <span className="toast-content">{toastMessage}</span>
+        </div>
       )}
+      {renderCurrentView()}
     </div>
   );
 }
 
-export default App;
+export default function App() {
+  return (
+    <ThemeProvider>
+      <AuthProvider>
+        <WorkspaceProvider>
+          <BrowserRouter>
+            <MainAppRoutes />
+          </BrowserRouter>
+        </WorkspaceProvider>
+      </AuthProvider>
+    </ThemeProvider>
+  );
+}

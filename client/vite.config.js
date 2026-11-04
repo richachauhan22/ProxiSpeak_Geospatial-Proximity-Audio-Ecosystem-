@@ -8,6 +8,8 @@ export default defineConfig({
     alias: {
       'lucide-react': path.resolve(__dirname, './src/lib/lucide-react.jsx'),
       'framer-motion': path.resolve(__dirname, './src/lib/framer-motion.jsx'),
+      'react-router-dom': path.resolve(__dirname, './src/lib/react-router-dom.jsx'),
+      'axios': path.resolve(__dirname, './src/lib/axios.js'),
     },
   },
   server: {
