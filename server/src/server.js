@@ -270,6 +270,201 @@ app.get('/api/health', async (_req, res) => {
   });
 });
 
+// Auth REST API
+app.post('/api/auth/login', (req, res) => {
+  const { email, password } = req.body || {};
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required' });
+  }
+  const username = email.split('@')[0] || 'Mia';
+  const displayName = username.charAt(0).toUpperCase() + username.slice(1);
+  const user = {
+    id: `usr-${username.toLowerCase()}`,
+    name: displayName,
+    email,
+    role: 'Member',
+    avatar: '/avatar_mia.png',
+    avatarColor: '#2563eb',
+    title: 'Product Design Lead',
+    workspace: 'Acme Corp Virtual HQ',
+  };
+  const token = `jwt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  res.json({ token, user });
+});
+
+app.post('/api/auth/register', (req, res) => {
+  const { fullName, email, workspaceName } = req.body || {};
+  if (!email) {
+    return res.status(400).json({ error: 'Email is required' });
+  }
+  const user = {
+    id: `usr-${Date.now().toString(36)}`,
+    name: fullName || 'New Member',
+    email,
+    role: 'Admin',
+    avatar: '/avatar_mia.png',
+    avatarColor: '#6366f1',
+    title: 'Workspace Pioneer',
+    workspace: workspaceName || 'Acme Corp Virtual HQ',
+  };
+  const token = `jwt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  res.json({ token, user });
+});
+
+// Available Offices catalog
+app.get('/api/offices', (_req, res) => {
+  res.json([
+    {
+      id: 'oVice HQ / C-03',
+      slug: 'office-c03',
+      name: 'oVice HQ / Central Floor',
+      floor: 'Floor 3',
+      description: 'Main collaborative workspace featuring open-plan desks, coffee lounge, and conference rooms.',
+      capacity: 50,
+      onlineCount: activeUsers.size || 6,
+      activeHuddles: 2,
+      previewUrl: '/office_map.png',
+      tags: ['Open Floor', 'Spatial Audio', 'Whiteboard'],
+    },
+    {
+      id: 'Engineering Pod / E-01',
+      slug: 'eng-pod',
+      name: 'Engineering Sprint Pod',
+      floor: 'Floor 1',
+      description: 'High-focus pod with pair-programming desks, acoustic partitions, and low-latency audio.',
+      capacity: 25,
+      onlineCount: 4,
+      activeHuddles: 1,
+      previewUrl: '/office_map.png',
+      tags: ['Quiet Pod', 'Pairing', 'No Interruptions'],
+    },
+    {
+      id: 'Design Studio / D-02',
+      slug: 'design-studio',
+      name: 'Design & UX Studio',
+      floor: 'Floor 2',
+      description: 'Visual ideation workspace equipped with interactive canvas whiteboards and brainstorming zones.',
+      capacity: 30,
+      onlineCount: 5,
+      activeHuddles: 1,
+      previewUrl: '/office_map.png',
+      tags: ['Canvas', 'Whiteboard', 'Design Review'],
+    },
+    {
+      id: 'Executive Suite / X-07',
+      slug: 'executive-suite',
+      name: 'Executive Boardroom',
+      floor: 'Floor 7',
+      description: 'High-privacy soundproof boardroom with -24dB partition walls and encrypted WebRTC mesh.',
+      capacity: 15,
+      onlineCount: 2,
+      activeHuddles: 1,
+      previewUrl: '/office_map.png',
+      tags: ['Private', 'Encrypted', 'Soundproof'],
+    },
+  ]);
+});
+
+// Team Members Directory
+app.get('/api/users', (_req, res) => {
+  res.json([
+    {
+      id: 'user-mia',
+      name: 'Mia Chen',
+      email: 'mia.chen@proxispeak.internal',
+      title: 'Product Design Lead',
+      avatar: '/avatar_mia.png',
+      color: '#2563eb',
+      status: 'online',
+      currentOffice: 'oVice HQ / C-03',
+      coordinates: { x: 420, y: 310 },
+      isSpeaking: true,
+      micStatus: 'active',
+      bio: 'Pioneering spatial interface interactions and 2D canvas workflows.',
+    },
+    {
+      id: 'user-alex',
+      name: 'Alex Rivera',
+      email: 'alex.rivera@proxispeak.internal',
+      title: 'Principal Systems Engineer',
+      avatar: '/avatar_alex.png',
+      color: '#10b981',
+      status: 'online',
+      currentOffice: 'oVice HQ / C-03',
+      coordinates: { x: 470, y: 320 },
+      isSpeaking: false,
+      micStatus: 'muted',
+      bio: 'Distributed systems, WebRTC signaling mesh, and Redis Pub/Sub scaling.',
+    },
+    {
+      id: 'user-david',
+      name: 'David Kim',
+      email: 'david.kim@proxispeak.internal',
+      title: 'Frontend Architect',
+      avatar: '/avatar_david.png',
+      color: '#8b5cf6',
+      status: 'busy',
+      currentOffice: 'Engineering Pod / E-01',
+      coordinates: { x: 250, y: 190 },
+      isSpeaking: false,
+      micStatus: 'muted',
+      bio: 'HTML5 Canvas rendering, 60 FPS animation loop, and Web Audio graphs.',
+    },
+    {
+      id: 'user-marcus',
+      name: 'Marcus Vance',
+      email: 'marcus.vance@proxispeak.internal',
+      title: 'DevOps & Infrastructure Lead',
+      avatar: '/avatar_marcus.png',
+      color: '#f59e0b',
+      status: 'online',
+      currentOffice: 'Engineering Pod / E-01',
+      coordinates: { x: 290, y: 180 },
+      isSpeaking: true,
+      micStatus: 'active',
+      bio: 'Kubernetes cluster topologies, TURN servers, and Docker containers.',
+    },
+    {
+      id: 'user-oliver',
+      name: 'Oliver Thorne',
+      email: 'oliver.thorne@proxispeak.internal',
+      title: 'Audio DSP Specialist',
+      avatar: '/avatar_oliver.png',
+      color: '#ec4899',
+      status: 'away',
+      currentOffice: 'Executive Suite / X-07',
+      coordinates: { x: 620, y: 440 },
+      isSpeaking: false,
+      micStatus: 'idle',
+      bio: 'Acoustic raycasting, biquad filtration, and stereophonic binaural panning.',
+    },
+  ]);
+});
+
+// Notifications
+app.get('/api/notifications', (_req, res) => {
+  res.json([
+    {
+      id: 'notif-1',
+      title: 'Proximity Audio Connection',
+      message: 'Alex Rivera walked into your hearing radius (oVice HQ / C-03).',
+      timestamp: '2 minutes ago',
+      type: 'proximity',
+      read: false,
+      officeId: 'oVice HQ / C-03',
+    },
+    {
+      id: 'notif-2',
+      title: 'Team Huddle Started',
+      message: 'Sprint review started in Engineering Sprint Pod.',
+      timestamp: '14 minutes ago',
+      type: 'office',
+      read: false,
+      officeId: 'Engineering Pod / E-01',
+    },
+  ]);
+});
+
 app.get('/api/offices/:officeId', async (_req, res) => {
   const officeId = _req.params.officeId || config.officeId;
   const officeDoc = await getOfficeWithLayout(officeId, { model: OfficeModel });
@@ -1050,4 +1245,4 @@ async function startServer() {
 
 startServer();
 
-export { app, io, activeUsers, activeRooms, activeGraphs, officeGrids, redisService };
+export { app, io, activeUsers, activeRooms, activeGraphs };
