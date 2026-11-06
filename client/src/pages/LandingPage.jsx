@@ -9,38 +9,37 @@ import {
   Building,
   ShieldCheck,
   ArrowRight,
-  Sparkles,
   ChevronDown,
   Check,
   X,
   Play,
-  Zap,
+  Sparkles,
 } from 'lucide-react';
 
 const FEATURES = [
   {
     number: '01',
-    title: 'Spatial Audio',
+    title: '360° Spatial Audio',
     copy: 'Hear colleagues as they approach. Sound volume and stereo balance automatically adjust based on physical pixel distance.',
     icon: Volume2,
     tag: '360° Attenuation',
-    color: '#6366f1',
+    color: 'indigo',
   },
   {
     number: '02',
-    title: 'Virtual Office',
-    copy: 'Explore an interactive 2D workspace. Glide avatars smoothly across meeting tables, private focus cabins, and open lounges at 60 FPS.',
+    title: '60 FPS Canvas Navigation',
+    copy: 'Glide avatars smoothly across customizable high-DPI office maps using intuitive WASD keys or click-to-walk navigation.',
     icon: Compass,
     tag: '60 FPS Canvas',
-    color: '#3b82f6',
+    color: 'blue',
   },
   {
     number: '03',
-    title: 'Real-Time Collaboration',
-    copy: 'Meet colleagues without creating formal meeting links or scheduling calendar invites. Walk up and start talking naturally.',
+    title: 'Frictionless Collaboration',
+    copy: 'Meet teammates without creating formal meeting links or scheduling calendar invites. Walk up and start talking naturally.',
     icon: Users,
-    tag: 'Frictionless',
-    color: '#14b8a6',
+    tag: 'Zero Friction',
+    color: 'teal',
   },
   {
     number: '04',
@@ -48,52 +47,52 @@ const FEATURES = [
     copy: 'Identifies nearby colleagues within a 100px proximity radius and dynamically groups participants into ad-hoc spatial audio clusters.',
     icon: Radio,
     tag: 'O(1) Spatial Grid',
-    color: '#10b981',
+    color: 'emerald',
   },
   {
     number: '05',
-    title: 'Interactive Workspace',
-    copy: 'Work in a shared digital environment with interactive whiteboards, acoustic sound-blocking partitions, and multi-floor zones.',
+    title: 'Acoustic Partitioning',
+    copy: 'Work in a shared digital environment with sound-blocking partitions, private focus booths, and glass meeting rooms with raycast muffling.',
     icon: Building,
-    tag: 'Acoustic Occlusion',
-    color: '#8b5cf6',
+    tag: 'Sound Occlusion',
+    color: 'purple',
   },
   {
     number: '06',
-    title: 'Secure Communication',
+    title: 'Secure P2P WebRTC',
     copy: 'Direct WebRTC peer-to-peer audio encrypted in transit. Clear microphone permission management and hardware telemetry privacy.',
     icon: ShieldCheck,
-    tag: 'P2P WebRTC',
-    color: '#f59e0b',
+    tag: 'End-to-End P2P',
+    color: 'amber',
   },
 ];
 
 const HOW_IT_WORKS = [
   {
     step: '01',
-    title: 'Join Your Workspace',
-    desc: 'Enter your company digital campus with one click. Select your customizable avatar and customize your display badge.',
+    title: 'Choose Your Space',
+    desc: 'Enter your team digital campus with one click. Select an office floor or join an existing meeting code instantly.',
   },
   {
     step: '02',
-    title: 'Move Your Avatar',
-    desc: 'Use intuitive WASD or arrow keys to stroll across the virtual office floor, or simply click any desk to navigate there.',
+    title: 'Personalize Your Avatar',
+    desc: 'Pick your custom avatar portrait, choose your glowing aura ring color, and set your status badge.',
   },
   {
     step: '03',
-    title: 'Approach Your Colleagues',
-    desc: 'When you step into a colleague’s 100px proximity circle, you automatically establish an instant peer-to-peer audio channel.',
+    title: 'Walk, Talk & Connect',
+    desc: 'Glide with WASD or click-to-walk. When you step into a colleague’s 100px proximity circle, you automatically connect.',
   },
   {
     step: '04',
-    title: 'Start Talking Naturally',
-    desc: 'No Zoom links. No waiting rooms. Experience spatial binaural volume that fades in and out just like walking in a real room.',
+    title: 'Natural Conversations',
+    desc: 'No Zoom links, no waiting rooms. Experience spatial binaural volume that fades in and out just like walking in a real room.',
   },
 ];
 
 const COMPARISON = [
   { feature: 'Spontaneous hallway bump-ins', proxispeak: true, zoom: false, gather: true },
-  { feature: 'Proximity-based 3D spatial panning', proxispeak: true, zoom: false, gather: 'Basic' },
+  { feature: 'Proximity-based 360° spatial panning', proxispeak: true, zoom: false, gather: 'Basic' },
   { feature: 'Acoustic wall & obstacle occlusion', proxispeak: true, zoom: false, gather: false },
   { feature: 'Hardware-accelerated 60 FPS Canvas', proxispeak: true, zoom: false, gather: true },
   { feature: 'Zero installation (100% browser WebRTC)', proxispeak: true, zoom: 'Partial', gather: true },
@@ -106,16 +105,16 @@ const FAQS = [
     a: 'ProxiSpeak continuously tracks avatar coordinates on an HTML5 Canvas. As you walk closer to another colleague, the browser Web Audio API dynamically recalculates distance attenuation, lowpass frequency absorption, and stereo channel panning in real time.',
   },
   {
-    q: 'Do I need to install any software or plugins?',
-    a: 'No. ProxiSpeak is 100% web native. It runs on any modern browser using WebRTC, Web Audio API, and HTML5 Canvas with zero downloads or browser extensions required.',
+    q: 'Do I need to install any software or browser extensions?',
+    a: 'No. ProxiSpeak is 100% web native. It runs on any modern browser using WebRTC, Web Audio API, and HTML5 Canvas with zero downloads or browser plugins required.',
   },
   {
     q: 'What happens when two people stand behind an office wall or partition?',
     a: 'ProxiSpeak features real-time obstacle raycasting. If a sound-blocking cubicle partition or glass boardroom wall intersects the line of sight between two avatars, audio is automatically attenuated (-12dB) with acoustic muffling applied.',
   },
   {
-    q: 'Can ProxiSpeak scale to large teams?',
-    a: 'Yes. Our backend utilizes an O(1) Spatial Hash Grid and Redis Pub/Sub signaling cluster with WebRTC mesh degree capping (up to 8 prioritized simultaneous active speakers) to prevent client CPU and bandwidth saturation.',
+    q: 'Can ProxiSpeak scale to large teams and companies?',
+    a: 'Yes. Our architecture utilizes an O(1) Spatial Hash Grid and Redis Pub/Sub signaling cluster with WebRTC mesh degree capping (up to 8 prioritized simultaneous active speakers) to prevent client CPU and bandwidth saturation.',
   },
 ];
 
@@ -128,7 +127,7 @@ export default function LandingPage({ onEnter, onExplore, onDirectOffice }) {
     if (onEnter) {
       onEnter();
     } else {
-      navigate('/app');
+      navigate('/join');
     }
   };
 
@@ -140,13 +139,13 @@ export default function LandingPage({ onEnter, onExplore, onDirectOffice }) {
 
   return (
     <div className="landing-page modern-landing">
-      {/* Ambient background blur orbs */}
+      {/* Ambient background glow orbs */}
       <div className="landing-ambient-orb orb-1" aria-hidden="true" />
       <div className="landing-ambient-orb orb-2" aria-hidden="true" />
       <div className="landing-ambient-orb orb-3" aria-hidden="true" />
 
-      {/* Sticky Modern Frosted Header */}
-      <header className="landing-nav glass-nav sticky top-0 z-50">
+      {/* Sticky Glassmorphism Header */}
+      <header className="landing-nav glass-nav">
         <a
           className="landing-brand"
           href="/"
@@ -173,20 +172,31 @@ export default function LandingPage({ onEnter, onExplore, onDirectOffice }) {
         </a>
 
         <nav className="nav-links" aria-label="Main navigation">
-          <a href="#home">Home</a>
           <a href="#features">Features</a>
+          <a href="#audio-demo">Spatial Audio</a>
           <a href="#how-it-works">How It Works</a>
-          <a href="#about">About</a>
-          <a href="#contact">Contact</a>
+          <a href="#comparison">Comparison</a>
+          <a href="#faq">FAQ</a>
         </nav>
 
         <div className="nav-actions">
+          {onDirectOffice && (
+            <button
+              type="button"
+              className="nav-secondary-btn"
+              onClick={onDirectOffice}
+              title="Instant 1-click preview without setup"
+            >
+              <span>Instant Demo</span>
+            </button>
+          )}
+
           <button
             type="button"
             className="nav-secondary-btn"
             onClick={() => navigate('/login')}
           >
-            <span>Login</span>
+            <span>Sign In</span>
           </button>
 
           <button
@@ -195,7 +205,7 @@ export default function LandingPage({ onEnter, onExplore, onDirectOffice }) {
             onClick={handleEnterOffice}
             aria-label="Enter Virtual Office"
           >
-            <span>Get Started</span>
+            <span>Enter Office</span>
             <ArrowRight size={14} />
           </button>
         </div>
@@ -207,7 +217,7 @@ export default function LandingPage({ onEnter, onExplore, onDirectOffice }) {
           <div className="landing-hero-copy">
             <div className="hero-badge">
               <span className="badge-pulse-dot" />
-              <span className="badge-text">Move Closer. Connect Naturally.</span>
+              <span className="badge-text">Next-Gen Spatial Collaboration</span>
               <span className="badge-arrow">→</span>
             </div>
 
@@ -232,400 +242,502 @@ export default function LandingPage({ onEnter, onExplore, onDirectOffice }) {
                 <ArrowRight size={16} />
               </button>
 
-              <a
-                href="#features"
-                className="landing-secondary text-btn"
-                onClick={(e) => {
-                  e.preventDefault();
-                  document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' });
-                  if (onExplore) onExplore();
-                }}
-              >
-                <span>Explore Features</span>
-                <ChevronDown size={16} />
-              </a>
+              {onDirectOffice ? (
+                <button
+                  type="button"
+                  className="landing-direct-btn modern-glass-btn"
+                  onClick={onDirectOffice}
+                >
+                  <Sparkles size={16} className="text-amber-500" />
+                  <span>Instant 1-Click Tour</span>
+                </button>
+              ) : (
+                <a
+                  href="#features"
+                  className="landing-secondary text-btn"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' });
+                    if (onExplore) onExplore();
+                  }}
+                >
+                  <span>Explore Features</span>
+                  <ChevronDown size={16} />
+                </a>
+              )}
             </div>
 
-            {/* Metrics Bar */}
-            <div className="hero-metrics-strip">
-              <div className="metric-cell">
-                <span className="metric-val">&lt; 18ms</span>
-                <span className="metric-lbl">Positional Latency</span>
-              </div>
-              <div className="metric-divider" />
-              <div className="metric-cell">
-                <span className="metric-val">360°</span>
-                <span className="metric-lbl">Binaural Panning</span>
-              </div>
-              <div className="metric-divider" />
-              <div className="metric-cell">
-                <span className="metric-val">60 FPS</span>
-                <span className="metric-lbl">Canvas Rendering</span>
-              </div>
-              <div className="metric-divider" />
-              <div className="metric-cell">
-                <span className="metric-val">100%</span>
-                <span className="metric-lbl">Browser WebRTC</span>
-              </div>
+            <div className="landing-live-note">
+              <span className="live-status-pill">
+                <span className="live-dot ping-animation" />
+                <span>48 Teammates Active Now</span>
+              </span>
+              <span className="note-divider">·</span>
+              <span>WebRTC Mesh P2P</span>
             </div>
           </div>
 
           {/* Interactive Hero Visual Showcase */}
           <div className="landing-hero-visual">
-            <div className="hero-preview-frame">
-              <div className="preview-top-chrome">
-                <div className="chrome-dots">
-                  <span className="dot dot-red" />
-                  <span className="dot dot-yellow" />
-                  <span className="dot dot-green" />
+            <div className="modern-preview-card">
+              <div className="preview-topline glass-bar">
+                <div className="preview-dots">
+                  <span className="dot red" />
+                  <span className="dot yellow" />
+                  <span className="dot green" />
                 </div>
-                <div className="chrome-url-bar">
-                  <span>proxispeak.app/app/office/oVice-HQ-C03</span>
+                <div className="preview-space-pill">
+                  <span className="pulse-icon">●</span>
+                  <span>proxispeak.app/office/HQ-C03</span>
                 </div>
-                <div className="chrome-live-pill">
-                  <span className="live-dot" /> LIVE CANVAS
+                <div className="preview-online-tag">
+                  <span className="online-beacon" /> LIVE CANVAS
                 </div>
               </div>
 
               {/* Simulated Virtual Office Canvas */}
-              <div className="hero-canvas-mockup">
-                <div className="mockup-office-bg">
-                  {/* Desks and Obstacles */}
-                  <div className="mockup-desk desk-left" />
-                  <div className="mockup-desk desk-right" />
-                  <div className="mockup-table center-table">
-                    <span className="table-label">Central Lounge</span>
-                  </div>
-                  <div className="mockup-wall acoustic-wall">
-                    <span>Acoustic Partition (-12dB)</span>
-                  </div>
+              <div className="modern-floor-canvas">
+                <div className="floor-grid-pattern" />
 
-                  {/* Avatars */}
-                  <div className="mockup-avatar avatar-mia" style={{ left: '38%', top: '44%' }}>
-                    <div className="avatar-proximity-ring" />
-                    <div className="avatar-disc bg-blue-600">
-                      <img src="/avatar_mia.png" alt="Mia" onError={(e) => { e.target.style.display = 'none'; }} />
-                    </div>
-                    <span className="avatar-tag">You (Mia)</span>
-                    <span className="avatar-speaking-wave">🔊</span>
-                  </div>
+                {/* Furniture clusters */}
+                <div className="preview-furniture desk-cluster-1">
+                  <span className="furniture-label">Team Desks</span>
+                </div>
+                <div className="preview-furniture desk-cluster-2">
+                  <span className="furniture-label">Focus Lounge</span>
+                </div>
 
-                  <div className="mockup-avatar avatar-alex" style={{ left: '52%', top: '42%' }}>
-                    <div className="avatar-disc bg-emerald-600">
-                      <img src="/avatar_alex.png" alt="Alex" onError={(e) => { e.target.style.display = 'none'; }} />
-                    </div>
-                    <span className="avatar-tag">Alex (Eng)</span>
-                    <span className="avatar-connection-line" />
-                  </div>
+                {/* Acoustic Partition Wall */}
+                <div className="acoustic-wall">
+                  <span className="acoustic-wall-label">-12dB Wall</span>
+                </div>
 
-                  <div className="mockup-avatar avatar-david" style={{ left: '72%', top: '65%' }}>
-                    <div className="avatar-disc bg-purple-600">
-                      <img src="/avatar_david.png" alt="David" onError={(e) => { e.target.style.display = 'none'; }} />
-                    </div>
-                    <span className="avatar-tag">David (Quiet Zone)</span>
-                  </div>
+                {/* Spatial Soundwaves */}
+                <div className="preview-audio-bubble wave-1" />
+                <div className="preview-audio-bubble wave-2" />
 
-                  {/* Spatial Soundwaves */}
-                  <div className="hero-soundwave wave-1" />
-                  <div className="hero-soundwave wave-2" />
-
-                  {/* Proximity Floating HUD */}
-                  <div className="mockup-proximity-hud">
-                    <div className="hud-metric">
-                      <span className="hud-title">ACTIVE HUDDLE</span>
-                      <span className="hud-value text-emerald-400">Connected with Alex Rivera</span>
-                    </div>
-                    <div className="hud-db-bar">
-                      <div className="hud-fill" style={{ width: '78%' }} />
-                    </div>
-                    <span className="hud-db-val">-18.4 dB (Proximity 76px)</span>
+                {/* Colleague A: Alex */}
+                <div className="preview-person person-a">
+                  <div className="person-avatar" style={{ background: '#059669' }}>
+                    <img
+                      src="/avatar_alex.png"
+                      alt="Alex"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                    <span>A</span>
                   </div>
+                  <span className="person-info-tag">Alex (Eng)</span>
+                </div>
+
+                {/* Colleague B: David */}
+                <div className="preview-person person-b">
+                  <div className="person-avatar" style={{ background: '#7c3aed' }}>
+                    <img
+                      src="/avatar_david.png"
+                      alt="David"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                    <span>D</span>
+                  </div>
+                  <span className="person-info-tag">David (Focus)</span>
+                </div>
+
+                {/* Local User: You (Mia) */}
+                <div className="preview-person person-c is-you">
+                  <div className="proximity-aura-ring" />
+                  <div className="person-avatar" style={{ background: '#2563eb' }}>
+                    <img
+                      src="/avatar_mia.png"
+                      alt="Mia"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                    <span>M</span>
+                  </div>
+                  <span className="person-info-tag">
+                    <span>You (Mia)</span>
+                    <span className="speaking-wave-mini" title="Speaking">
+                      <i />
+                      <i />
+                      <i />
+                    </span>
+                  </span>
+                </div>
+
+                {/* Proximity Floating HUD */}
+                <div className="mockup-proximity-hud">
+                  <span className="hud-title">ACTIVE HUDDLE</span>
+                  <span className="hud-value">Connected with Alex Rivera</span>
+                  <div className="hud-db-bar">
+                    <div className="hud-fill" style={{ width: '78%' }} />
+                  </div>
+                  <span className="hud-db-val">-18.4 dB (Proximity 76px)</span>
+                </div>
+
+                {/* Bottom glass dock */}
+                <div className="preview-presence glass-dock">
+                  <div className="team-avatar-stack">
+                    <span className="tiny-avatar a1">M</span>
+                    <span className="tiny-avatar a2">A</span>
+                    <span className="tiny-avatar a3">D</span>
+                  </div>
+                  <span>Floor 6 · Engineering Campus</span>
+                  <span className="key-hint"><kbd>WASD</kbd> or click to move</span>
                 </div>
               </div>
             </div>
           </div>
         </section>
 
-        {/* ================= FEATURES SECTION ================= */}
-        <section id="features" className="landing-features-section">
-          <div className="section-header-centered">
-            <span className="section-kicker">BUILT FOR IMMERSIVE WORK</span>
-            <h2 className="section-title">Designed for Natural Connection</h2>
-            <p className="section-subtitle">
-              Say goodbye to exhausting Zoom grid fatigue. ProxiSpeak replicates the organic physical dynamics of an agile workplace.
-            </p>
-          </div>
-
-          <div className="features-grid-container">
-            {FEATURES.map((feat) => {
-              const Icon = feat.icon;
-              return (
-                <div key={feat.number} className="feature-card-modern">
-                  <div className="feature-card-top">
-                    <div className="feature-icon-badge" style={{ backgroundColor: `${feat.color}15`, color: feat.color }}>
-                      <Icon size={24} />
-                    </div>
-                    <span className="feature-card-num">{feat.number}</span>
-                  </div>
-                  <h3 className="feature-card-title">{feat.title}</h3>
-                  <p className="feature-card-copy">{feat.copy}</p>
-                  <div className="feature-card-footer">
-                    <span className="feature-tag-pill">{feat.tag}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* ================= HOW IT WORKS ================= */}
-        <section id="how-it-works" className="how-it-works-section">
-          <div className="section-header-centered">
-            <span className="section-kicker">FOUR INTUITIVE STEPS</span>
-            <h2 className="section-title">How ProxiSpeak Works</h2>
-            <p className="section-subtitle">
-              No meeting links. No calendar invitations. Collaboration as frictionless as real life.
-            </p>
-          </div>
-
-          <div className="how-it-works-grid">
-            {HOW_IT_WORKS.map((item, idx) => (
-              <div key={item.step} className="how-step-card">
-                <div className="step-number-glow">{item.step}</div>
-                <h3 className="step-card-title">{item.title}</h3>
-                <p className="step-card-desc">{item.desc}</p>
-                {idx < HOW_IT_WORKS.length - 1 && (
-                  <div className="step-connector-arrow" aria-hidden="true">→</div>
-                )}
-              </div>
-            ))}
+        {/* ================= METRICS STRIP ================= */}
+        <section className="metrics-strip">
+          <div className="metrics-container">
+            <div className="metric-box">
+              <span className="metric-val">&lt; 18ms</span>
+              <span className="metric-lbl">Positional Latency</span>
+              <span className="metric-desc">Real-time Socket.io signaling engine</span>
+            </div>
+            <div className="metric-box">
+              <span className="metric-val">360°</span>
+              <span className="metric-lbl">Binaural Audio</span>
+              <span className="metric-desc">Dynamic stereo separation & distance falloff</span>
+            </div>
+            <div className="metric-box">
+              <span className="metric-val">60 FPS</span>
+              <span className="metric-lbl">Canvas Rendering</span>
+              <span className="metric-desc">Hardware-accelerated HTML5 rendering</span>
+            </div>
+            <div className="metric-box">
+              <span className="metric-val">100%</span>
+              <span className="metric-lbl">Browser WebRTC</span>
+              <span className="metric-desc">Zero install, end-to-end encrypted</span>
+            </div>
           </div>
         </section>
 
         {/* ================= INTERACTIVE SPATIAL AUDIO SIMULATOR ================= */}
-        <section id="audio-demo" className="landing-audio-simulator-section">
-          <div className="simulator-card-wrapper">
-            <div className="simulator-copy">
-              <span className="section-kicker">INTERACTIVE SIMULATION</span>
-              <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
-                Test the Spatial Audio Falloff
-              </h2>
-              <p className="text-slate-600 dark:text-slate-400 text-sm mb-6">
-                Drag the avatar distance scrubber below to hear how volume naturally attenuates as distance varies between 20px and 260px.
-              </p>
+        <section className="audio-demo-section" id="audio-demo">
+          <div className="section-container">
+            <div className="section-heading centered">
+              <span className="landing-kicker">INTERACTIVE SIMULATION</span>
+              <h2>Experience <span>Spatial Proximity Audio</span></h2>
+              <p>Drag the distance slider below to hear and see how audio volume automatically adjusts based on virtual proximity.</p>
+            </div>
 
-              <div className="distance-slider-control">
-                <div className="flex justify-between text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">
-                  <span>Proximity Distance: {demoDistance} px</span>
-                  <span className="text-indigo-600 dark:text-indigo-400">Acoustic Volume: {volumePercent}%</span>
+            <div className="audio-sandbox-card glass-panel">
+              <div className="sandbox-visual">
+                {/* You */}
+                <div className="speaker-avatar-node">
+                  <div className="avatar-circle you-circle">
+                    <img
+                      src="/avatar_mia.png"
+                      alt="You"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                    <span>You</span>
+                  </div>
+                  <span className="node-name">You (Mia)</span>
                 </div>
+
+                {/* Dynamic Connection Beam */}
+                <div
+                  className="connection-beam"
+                  style={{
+                    width: `${Math.max(60, Math.min(320, demoDistance * 1.2))}px`,
+                    opacity: demoDistance <= 220 ? 1 : 0.3,
+                  }}
+                >
+                  <span className="distance-badge">{demoDistance} px ({volumePercent}%)</span>
+                </div>
+
+                {/* Colleague */}
+                <div className="speaker-avatar-node">
+                  <div
+                    className="sound-radius-bubble"
+                    style={{
+                      transform: `scale(${Math.max(0.4, volumePercent / 100)})`,
+                      opacity: Math.max(0.15, volumePercent / 100),
+                    }}
+                  />
+                  <div className="avatar-circle" style={{ borderColor: '#10b981', background: '#10b981' }}>
+                    <img
+                      src="/avatar_alex.png"
+                      alt="Alex"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                    <span>Alex</span>
+                  </div>
+                  <span className="node-name">Alex Rivera</span>
+                </div>
+              </div>
+
+              <div className="sandbox-controls">
+                <div className="slider-header">
+                  <span>Proximity Distance: <strong>{demoDistance} px</strong></span>
+                  <span>Acoustic Volume: <strong>{volumePercent}%</strong></span>
+                </div>
+
                 <input
                   type="range"
                   min="20"
                   max="260"
                   value={demoDistance}
                   onChange={(e) => setDemoDistance(Number(e.target.value))}
-                  className="w-full accent-indigo-600 cursor-pointer"
-                  aria-label="Proximity Distance"
+                  className="modern-range-slider"
+                  aria-label="Proximity Distance Scrubber"
                 />
-                <div className="flex justify-between text-[11px] text-slate-400 mt-1">
-                  <span>20px (Face to Face, 100%)</span>
+
+                <div className="slider-labels">
+                  <span>20px (Face-to-Face 100%)</span>
                   <span>100px (Signaling Threshold)</span>
-                  <span>260px (Muted, 0%)</span>
+                  <span>260px (Muted 0%)</span>
                 </div>
               </div>
 
-              <div className="mt-6 flex items-center gap-3">
+              <div className="sandbox-actions">
                 <button
                   type="button"
+                  className="test-sound-btn"
                   onClick={handleTestChime}
-                  className="btn-modern btn-primary text-sm flex items-center gap-2"
                 >
-                  <Play size={14} />
+                  <Play size={15} fill="currentColor" />
                   <span>Play Spatial Audio Chime</span>
                 </button>
-                <span className="text-xs text-slate-500">
-                  {demoDistance <= 100 ? '✅ Inside P2P WebRTC mesh' : '💤 Outside proximity hearing zone'}
+
+                <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>
+                  {demoDistance <= 100 ? '✅ Inside P2P WebRTC audio mesh' : '💤 Outside proximity hearing zone'}
                 </span>
-              </div>
-            </div>
 
-            <div className="simulator-visual">
-              <div className="radar-circle-outer">
-                <div
-                  className="radar-circle-proximity"
-                  style={{ width: `${Math.max(40, (demoDistance / 260) * 220)}px`, height: `${Math.max(40, (demoDistance / 260) * 220)}px` }}
-                />
-                <div className="radar-avatar-local">
-                  <span>You</span>
-                </div>
-                <div
-                  className="radar-avatar-remote"
-                  style={{
-                    transform: `translate(${Math.round(demoDistance * 0.45)}px, -${Math.round(demoDistance * 0.2)}px)`,
-                  }}
+                <button
+                  type="button"
+                  className="enter-office-quick"
+                  onClick={handleEnterOffice}
                 >
-                  <span>Alex</span>
-                </div>
+                  <span>Launch Live Workspace</span>
+                  <ArrowRight size={14} />
+                </button>
               </div>
             </div>
           </div>
         </section>
 
-        {/* ================= FEATURE COMPARISON ================= */}
-        <section className="landing-comparison-section">
-          <div className="section-header-centered">
-            <span className="section-kicker">WHY PROXISPEAK?</span>
-            <h2 className="section-title">A Modern Leap Beyond Traditional Meetings</h2>
-            <p className="section-subtitle">
-              See how ProxiSpeak compares to traditional videoconferencing tools and static virtual offices.
-            </p>
-          </div>
+        {/* ================= KEY FEATURES GRID ================= */}
+        <section className="feature-section" id="features">
+          <div className="section-container">
+            <div className="section-heading centered">
+              <span className="landing-kicker">ENGINEERED FOR TEAMS</span>
+              <h2>Designed for <span>Natural Connection</span></h2>
+              <p>Say goodbye to exhausting Zoom grid fatigue. ProxiSpeak replicates the organic physical dynamics of an agile workplace.</p>
+            </div>
 
-          <div className="comparison-table-wrapper">
-            <table className="comparison-table">
-              <thead>
-                <tr>
-                  <th>Capability</th>
-                  <th className="highlight-column">ProxiSpeak</th>
-                  <th>Legacy Zoom / Meet</th>
-                  <th>Gather Town</th>
-                </tr>
-              </thead>
-              <tbody>
-                {COMPARISON.map((row, idx) => (
-                  <tr key={idx}>
-                    <td className="font-medium text-slate-800 dark:text-slate-200">{row.feature}</td>
-                    <td className="highlight-column">
-                      <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-semibold text-sm">
-                        <Check size={16} /> Included
+            <div className="feature-grid modern-grid">
+              {FEATURES.map((feature) => {
+                const IconComponent = feature.icon;
+                return (
+                  <article className={`feature-card modern-card ${feature.color}`} key={feature.number}>
+                    <div className="card-top">
+                      <span className="feature-icon-badge">
+                        <IconComponent size={22} />
                       </span>
-                    </td>
-                    <td>
-                      {row.zoom === false ? (
-                        <span className="text-slate-400"><X size={16} className="inline text-rose-400" /> No</span>
-                      ) : (
-                        <span className="text-slate-500">{String(row.zoom)}</span>
-                      )}
-                    </td>
-                    <td>
-                      {row.gather === true ? (
-                        <span className="text-slate-700 dark:text-slate-300"><Check size={16} className="inline text-emerald-500" /> Yes</span>
-                      ) : row.gather === false ? (
-                        <span className="text-slate-400"><X size={16} className="inline text-rose-400" /> No</span>
-                      ) : (
-                        <span className="text-slate-500">{row.gather}</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      <span className="feature-pill-tag">{feature.tag}</span>
+                    </div>
+                    <span className="feature-number">{feature.number}</span>
+                    <h3>{feature.title}</h3>
+                    <p>{feature.copy}</p>
+                    <div className="card-hover-border" />
+                  </article>
+                );
+              })}
+            </div>
           </div>
         </section>
 
-        {/* ================= FREQUENTLY ASKED QUESTIONS ================= */}
-        <section className="landing-faq-section">
-          <div className="section-header-centered">
-            <span className="section-kicker">COMMON QUESTIONS</span>
-            <h2 className="section-title">Frequently Asked Questions</h2>
-          </div>
+        {/* ================= HOW IT WORKS FLOW ================= */}
+        <section className="how-section" id="how-it-works">
+          <div className="section-container">
+            <div className="section-heading centered">
+              <span className="landing-kicker">EFFORTLESS ONBOARDING</span>
+              <h2>From zero to <span>collaborating in 30 seconds.</span></h2>
+              <p>No software to install, no accounts to verify. Just enter your office and walk up to colleagues.</p>
+            </div>
 
-          <div className="faq-accordion-container">
-            {FAQS.map((faq, index) => {
-              const isOpen = openFaq === index;
-              return (
-                <div key={index} className={`faq-item-card ${isOpen ? 'open' : ''}`}>
-                  <button
-                    type="button"
-                    onClick={() => setOpenFaq(isOpen ? -1 : index)}
-                    className="faq-question-btn"
-                  >
-                    <span>{faq.q}</span>
-                    <ChevronDown size={18} className={`faq-arrow ${isOpen ? 'rotate-180' : ''}`} />
-                  </button>
-                  {isOpen && <div className="faq-answer-content">{faq.a}</div>}
-                </div>
-              );
-            })}
+            <div className="how-steps modern-steps-flow">
+              {HOW_IT_WORKS.map((item, idx) => (
+                <React.Fragment key={item.step}>
+                  <article className="step-card">
+                    <div className="step-number-glow">{item.step}</div>
+                    <div className="step-body">
+                      <h3>{item.title}</h3>
+                      <p>{item.desc}</p>
+                    </div>
+                  </article>
+                  {idx < HOW_IT_WORKS.length - 1 && (
+                    <div className="step-connector-arrow" aria-hidden="true">→</div>
+                  )}
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ================= FEATURE COMPARISON TABLE ================= */}
+        <section className="comparison-section" id="comparison">
+          <div className="section-container">
+            <div className="section-heading centered">
+              <span className="landing-kicker">WHY PROXISPEAK?</span>
+              <h2>A Modern Leap <span>Beyond Traditional Meetings</span></h2>
+              <p>Compare ProxiSpeak side-by-side with static video conferencing and legacy virtual workspaces.</p>
+            </div>
+
+            <div className="comparison-table-wrapper">
+              <table className="comparison-table">
+                <thead>
+                  <tr>
+                    <th>Capability</th>
+                    <th className="highlight-column">ProxiSpeak</th>
+                    <th>Legacy Zoom / Meet</th>
+                    <th>Gather Town</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {COMPARISON.map((row, idx) => (
+                    <tr key={idx}>
+                      <td className="comparison-feature-name">{row.feature}</td>
+                      <td className="highlight-column">
+                        <span className="comparison-tag-yes">
+                          <Check size={16} /> Included
+                        </span>
+                      </td>
+                      <td>
+                        {row.zoom === false ? (
+                          <span className="comparison-tag-no">
+                            <X size={15} style={{ color: '#f43f5e' }} /> No
+                          </span>
+                        ) : (
+                          <span className="comparison-tag-partial">{String(row.zoom)}</span>
+                        )}
+                      </td>
+                      <td>
+                        {row.gather === true ? (
+                          <span className="comparison-tag-yes">
+                            <Check size={15} /> Yes
+                          </span>
+                        ) : row.gather === false ? (
+                          <span className="comparison-tag-no">
+                            <X size={15} style={{ color: '#f43f5e' }} /> No
+                          </span>
+                        ) : (
+                          <span className="comparison-tag-partial">{row.gather}</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        {/* ================= FAQ ACCORDION ================= */}
+        <section className="faq-section" id="faq">
+          <div className="section-container">
+            <div className="section-heading centered">
+              <span className="landing-kicker">GOT QUESTIONS?</span>
+              <h2>Frequently Asked <span>Questions</span></h2>
+              <p>Everything you need to know about spatial audio, privacy, and team onboarding.</p>
+            </div>
+
+            <div className="faq-accordion-container">
+              {FAQS.map((faq, index) => {
+                const isOpen = openFaq === index;
+                return (
+                  <div key={index} className={`faq-item-card ${isOpen ? 'open' : ''}`}>
+                    <button
+                      type="button"
+                      onClick={() => setOpenFaq(isOpen ? -1 : index)}
+                      className="faq-question-btn"
+                    >
+                      <span>{faq.q}</span>
+                      <ChevronDown size={18} className={`faq-arrow ${isOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {isOpen && <div className="faq-answer-content">{faq.a}</div>}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </section>
 
         {/* ================= FINAL CALL TO ACTION ================= */}
         <section className="landing-cta-banner">
-          <div className="cta-banner-inner">
-            <h2 className="cta-banner-title">
-              Ready to Experience Natural Remote Collaboration?
-            </h2>
-            <p className="cta-banner-subtitle">
-              Join thousands of distributed engineers, designers, and teams who move closer and communicate naturally every day.
-            </p>
-            <div className="cta-banner-actions">
+          <div className="glass-banner">
+            <span className="cta-kicker">READY TO MEET YOUR TEAM?</span>
+            <h2>Step into your shared office today.</h2>
+            <p>Join hundreds of high-performing remote and hybrid engineering teams already using ProxiSpeak.</p>
+            <div className="cta-buttons">
               <button
                 type="button"
-                className="btn-modern btn-primary text-base px-8 py-3.5 shadow-xl"
+                className="landing-primary primary-glow-btn"
                 onClick={handleEnterOffice}
-                aria-label="Enter Virtual Office"
               >
-                <span>Enter Your Virtual Office Now</span>
-                <ArrowRight size={18} />
+                <span>Launch Office Now</span>
+                <ArrowRight size={16} />
               </button>
+
+              {onDirectOffice && (
+                <button
+                  type="button"
+                  className="landing-direct-btn modern-glass-btn"
+                  onClick={onDirectOffice}
+                >
+                  <Sparkles size={16} className="text-amber-500" />
+                  <span>Instant 1-Click Tour</span>
+                </button>
+              )}
+
               <button
                 type="button"
-                className="btn-modern btn-secondary text-base px-6 py-3.5"
+                className="modern-glass-btn"
                 onClick={() => navigate('/login')}
               >
-                <span>Sign In to Existing Workspace</span>
+                <span>Sign In to Workspace</span>
               </button>
             </div>
           </div>
         </section>
       </main>
 
-      {/* ================= FOOTER ================= */}
-      <footer id="about" className="landing-footer">
-        <div className="footer-top-grid">
-          <div className="footer-col-brand">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="brand-logo-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                  <path
-                    d="M12 2L4 6.5V17.5L12 22L20 17.5V6.5L12 2Z"
-                    stroke="currentColor"
-                    strokeWidth="2.2"
-                    strokeLinejoin="round"
-                  />
-                  <circle cx="12" cy="12" r="3.2" fill="currentColor" />
+      {/* ================= MODERN FOOTER ================= */}
+      <footer className="modern-footer">
+        <div className="footer-container">
+          <div className="footer-left">
+            <a
+              className="landing-brand"
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+            >
+              <div className="brand-logo-glow mini">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 2L4 6.5V17.5L12 22L20 17.5V6.5L12 2Z" stroke="currentColor" strokeWidth="2" />
+                  <circle cx="12" cy="12" r="3" fill="currentColor" />
                 </svg>
               </div>
-              <span className="font-bold text-lg text-slate-900 dark:text-white">ProxiSpeak</span>
-            </div>
-            <p className="text-sm text-slate-500 mb-4 max-w-xs">
-              Move Closer. Connect Naturally. The real-time geospatial virtual office powered by WebRTC and Web Audio API.
-            </p>
-            <span className="text-xs text-slate-400">© 2026 ProxiSpeak, Inc. All rights reserved.</span>
+              <span className="brand-title">Proxi<span>Speak</span></span>
+            </a>
+            <p className="footer-tagline">Spatial audio & collaborative virtual offices for high-velocity teams.</p>
           </div>
 
-          <div className="footer-col">
-            <h4>Product</h4>
-            <a href="#features">Spatial Audio</a>
-            <a href="#features">2D Virtual Office</a>
-            <a href="#features">Acoustic Partitioning</a>
-            <a href="#how-it-works">How It Works</a>
+          <div className="footer-center">
+            <span className="status-badge-footer">
+              <span className="beacon-green" />
+              <span>All Systems Operational · WebRTC Mesh Active</span>
+            </span>
           </div>
 
-          <div className="footer-col">
-            <h4>Resources</h4>
-            <a href="/docs/WEBRTC_AUDIO.md" target="_blank" rel="noreferrer">Audio DSP Spec</a>
-            <a href="/docs/MESH_SCALING_AND_REDIS.md" target="_blank" rel="noreferrer">Mesh Scaling</a>
-            <a href="/docs/ROOM_PERSISTENCE_AND_SPATIAL_ENGINE.md" target="_blank" rel="noreferrer">Spatial Engine</a>
-          </div>
-
-          <div id="contact" className="footer-col">
-            <h4>Security & Privacy</h4>
-            <a href="#privacy">End-to-End Encryption</a>
-            <a href="#privacy">Hardware Permissions</a>
-            <a href="#privacy">Telemetry Privacy</a>
+          <div className="footer-right">
+            <span>© {new Date().getFullYear()} ProxiSpeak Ecosystem. Built with React & Socket.io</span>
           </div>
         </div>
       </footer>
