@@ -105,7 +105,7 @@ export default function OviceHeader({
 
         {/* Center Section: Ambience Switcher & Action Pills */}
         <div className="hidden md:flex items-center gap-2.5">
-          {/* Segmented Ambience Pill */}
+          {/* Ambient Lighting Control */}
           <div className="flex items-center p-0.5 rounded-xl bg-slate-800/90 border border-slate-700/60 text-xs">
             <button
               type="button"
@@ -113,9 +113,9 @@ export default function OviceHeader({
                 sounds?.playClick?.();
                 onLightingChange?.('daylight');
               }}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-medium transition-all ${
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
                 lightingMode === 'daylight'
-                  ? 'bg-amber-500/20 text-amber-300 shadow-sm border border-amber-500/30 font-semibold'
+                  ? 'bg-amber-500/20 text-amber-300 shadow-sm border border-amber-500/30'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-750'
               }`}
               title="Daylight mode (Clear architectural lighting)"
@@ -129,9 +129,9 @@ export default function OviceHeader({
                 sounds?.playClick?.();
                 onLightingChange?.('sunset');
               }}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-medium transition-all ${
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
                 lightingMode === 'sunset'
-                  ? 'bg-orange-500/20 text-orange-300 shadow-sm border border-orange-500/30 font-semibold'
+                  ? 'bg-orange-500/20 text-orange-300 shadow-sm border border-orange-500/30'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-750'
               }`}
               title="Sunset golden hour ambience"
@@ -145,9 +145,9 @@ export default function OviceHeader({
                 sounds?.playClick?.();
                 onLightingChange?.('night');
               }}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-medium transition-all ${
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
                 lightingMode === 'night'
-                  ? 'bg-indigo-500/20 text-indigo-300 shadow-sm border border-indigo-500/30 font-semibold'
+                  ? 'bg-indigo-500/20 text-indigo-300 shadow-sm border border-indigo-500/30'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-750'
               }`}
               title="Night studio ambience"
@@ -263,16 +263,16 @@ export default function OviceHeader({
             <Settings className="w-4 h-4" />
           </button>
 
-          {/* Distinct Red-Bordered Leave Desk Button */}
+          {/* Secondary Outline Leave Desk Button */}
           <button
             type="button"
             onClick={onLeaveOffice}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-950/40 hover:bg-red-900/60 text-red-300 hover:text-red-100 border border-red-500/40 text-xs font-semibold shadow-lg shadow-red-950/20 active:scale-95 transition-all"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-white border border-slate-700/60 text-xs font-semibold active:scale-95 transition-all shadow-sm"
             title="Leave desk and return to lobby"
           >
             <span className="hidden sm:inline">Leave Desk</span>
             <span className="sm:hidden">Leave</span>
-            <span className="text-[11px] font-mono opacity-80">[→]</span>
+            <span className="text-[11px] font-mono opacity-70">[→]</span>
           </button>
         </div>
       </motion.div>

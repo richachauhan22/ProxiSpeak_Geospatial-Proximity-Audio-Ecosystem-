@@ -12,6 +12,7 @@ import {
   ChevronDown,
   Check,
   X,
+  Minus,
   Play,
   Sparkles,
 } from 'lucide-react';
@@ -180,20 +181,9 @@ export default function LandingPage({ onEnter, onExplore, onDirectOffice }) {
         </nav>
 
         <div className="nav-actions">
-          {onDirectOffice && (
-            <button
-              type="button"
-              className="nav-secondary-btn"
-              onClick={onDirectOffice}
-              title="Instant 1-click preview without setup"
-            >
-              <span>Instant Demo</span>
-            </button>
-          )}
-
           <button
             type="button"
-            className="nav-secondary-btn"
+            className="nav-text-link"
             onClick={() => navigate('/login')}
           >
             <span>Sign In</span>
@@ -205,8 +195,8 @@ export default function LandingPage({ onEnter, onExplore, onDirectOffice }) {
             onClick={handleEnterOffice}
             aria-label="Enter Virtual Office"
           >
-            <span>Enter Office</span>
-            <ArrowRight size={14} />
+            <span>Enter Virtual Office</span>
+            <ArrowRight size={14} aria-hidden="true" />
           </button>
         </div>
       </header>
@@ -238,8 +228,8 @@ export default function LandingPage({ onEnter, onExplore, onDirectOffice }) {
                 onClick={handleEnterOffice}
                 aria-label="Enter Virtual Office"
               >
-                <span>Enter Your Office</span>
-                <ArrowRight size={16} />
+                <span>Enter Virtual Office</span>
+                <ArrowRight size={16} aria-hidden="true" />
               </button>
 
               {onDirectOffice ? (
@@ -418,7 +408,7 @@ export default function LandingPage({ onEnter, onExplore, onDirectOffice }) {
         <section className="audio-demo-section" id="audio-demo">
           <div className="section-container">
             <div className="section-heading centered">
-              <span className="landing-kicker">INTERACTIVE SIMULATION</span>
+              <span className="landing-kicker">Interactive Simulation</span>
               <h2>Experience <span>Spatial Proximity Audio</span></h2>
               <p>Drag the distance slider below to hear and see how audio volume automatically adjusts based on virtual proximity.</p>
             </div>
@@ -491,6 +481,10 @@ export default function LandingPage({ onEnter, onExplore, onDirectOffice }) {
                   <span>100px (Signaling Threshold)</span>
                   <span>260px (Muted 0%)</span>
                 </div>
+
+                <div className="slider-status-feedback" role="status" aria-live="polite">
+                  {demoDistance <= 100 ? '✅ Inside P2P WebRTC audio mesh' : '💤 Outside proximity hearing zone'}
+                </div>
               </div>
 
               <div className="sandbox-actions">
@@ -499,21 +493,17 @@ export default function LandingPage({ onEnter, onExplore, onDirectOffice }) {
                   className="test-sound-btn"
                   onClick={handleTestChime}
                 >
-                  <Play size={15} fill="currentColor" />
+                  <Play size={15} fill="currentColor" aria-hidden="true" />
                   <span>Play Spatial Audio Chime</span>
                 </button>
-
-                <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>
-                  {demoDistance <= 100 ? '✅ Inside P2P WebRTC audio mesh' : '💤 Outside proximity hearing zone'}
-                </span>
 
                 <button
                   type="button"
                   className="enter-office-quick"
                   onClick={handleEnterOffice}
                 >
-                  <span>Launch Live Workspace</span>
-                  <ArrowRight size={14} />
+                  <span>Enter Virtual Office</span>
+                  <ArrowRight size={14} aria-hidden="true" />
                 </button>
               </div>
             </div>
@@ -604,29 +594,39 @@ export default function LandingPage({ onEnter, onExplore, onDirectOffice }) {
                       <td className="comparison-feature-name">{row.feature}</td>
                       <td className="highlight-column">
                         <span className="comparison-tag-yes">
-                          <Check size={16} /> Included
+                          <Check size={16} aria-hidden="true" />
+                          <span>Included</span>
                         </span>
                       </td>
                       <td>
                         {row.zoom === false ? (
                           <span className="comparison-tag-no">
-                            <X size={15} style={{ color: '#f43f5e' }} /> No
+                            <X size={15} aria-hidden="true" />
+                            <span>No</span>
                           </span>
                         ) : (
-                          <span className="comparison-tag-partial">{String(row.zoom)}</span>
+                          <span className="comparison-tag-partial">
+                            <Minus size={15} aria-hidden="true" />
+                            <span>{String(row.zoom)}</span>
+                          </span>
                         )}
                       </td>
                       <td>
                         {row.gather === true ? (
                           <span className="comparison-tag-yes">
-                            <Check size={15} /> Yes
+                            <Check size={15} aria-hidden="true" />
+                            <span>Yes</span>
                           </span>
                         ) : row.gather === false ? (
                           <span className="comparison-tag-no">
-                            <X size={15} style={{ color: '#f43f5e' }} /> No
+                            <X size={15} aria-hidden="true" />
+                            <span>No</span>
                           </span>
                         ) : (
-                          <span className="comparison-tag-partial">{row.gather}</span>
+                          <span className="comparison-tag-partial">
+                            <Minus size={15} aria-hidden="true" />
+                            <span>{row.gather}</span>
+                          </span>
                         )}
                       </td>
                     </tr>
@@ -678,9 +678,10 @@ export default function LandingPage({ onEnter, onExplore, onDirectOffice }) {
                 type="button"
                 className="landing-primary primary-glow-btn"
                 onClick={handleEnterOffice}
+                aria-label="Enter Virtual Office"
               >
-                <span>Launch Office Now</span>
-                <ArrowRight size={16} />
+                <span>Enter Virtual Office</span>
+                <ArrowRight size={16} aria-hidden="true" />
               </button>
 
               {onDirectOffice && (

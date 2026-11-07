@@ -115,48 +115,45 @@ export default function BottomToolbar({
     <div
       role="toolbar"
       aria-label="Virtual office audio and navigation controls"
-      className="fixed bottom-4 left-0 right-0 z-40 px-4 pointer-events-none select-none"
+      className="fixed bottom-4 left-0 right-0 z-40 px-4 pointer-events-none select-none flex justify-center"
     >
-      <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3 pointer-events-none">
+      <motion.div
+        initial={{ y: 24, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.35 }}
+        className="pointer-events-auto max-w-full flex flex-wrap items-center justify-center gap-1.5 p-1.5 rounded-2xl bg-slate-900/90 backdrop-blur-md border border-slate-700/60 text-slate-100 shadow-2xl"
+      >
         
         {/* =========================================================================
             CLUSTER 1: USER PROFILE CARD (LEFT)
             ========================================================================= */}
-        <motion.div
-          initial={{ y: 24, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.3 }}
-          className="pointer-events-auto flex items-center gap-3 px-3.5 py-2 rounded-2xl bg-slate-900/85 backdrop-blur-md border border-slate-700/60 text-slate-100 shadow-2xl hover:border-slate-600 transition-all"
-        >
+        <div className="flex items-center gap-2.5 px-2 py-1">
           {/* Avatar Bubble with Initial 'M' and Green Active Indicator Dot */}
           <div className="relative">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-emerald-500 via-teal-600 to-cyan-500 flex items-center justify-center text-white font-bold text-sm shadow-md ring-2 ring-emerald-400/50">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-emerald-500 via-teal-600 to-cyan-500 flex items-center justify-center text-white font-bold text-xs shadow-md ring-2 ring-emerald-400/50">
               {localUser.displayName ? localUser.displayName.charAt(0).toUpperCase() : 'M'}
             </div>
             {/* Green active dot */}
-            <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-400 ring-2 ring-slate-900 shadow-sm" />
+            <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-slate-900 shadow-sm" />
           </div>
 
           {/* User Name & Status Subtitle */}
           <div className="flex flex-col">
             <div className="flex items-center gap-1.5">
-              <span className="text-sm font-bold text-slate-100 leading-tight">
+              <span className="text-xs font-bold text-slate-100 leading-tight">
                 {localUser.displayName || 'Mia'}
               </span>
               <span className="text-[10px] font-medium text-slate-400 font-mono">(You)</span>
             </div>
-            <span className="text-xs font-medium text-emerald-400 leading-tight">
+            <span className="text-[11px] font-medium text-emerald-400 leading-tight">
               {localUser.status || 'Available'}
             </span>
           </div>
 
-          {/* Vertical separator */}
-          <div className="h-6 w-px bg-slate-700/60 mx-0.5" />
-
           {/* Dynamic Decibel Meter / Waveform Visualizer */}
           <div
             title={isSpeaking ? 'Speaking' : 'Voice meter'}
-            className={`voice-meter-indicator flex items-center gap-1.5 px-2 py-1 rounded-xl bg-slate-800/80 border border-slate-700/50 ${
+            className={`voice-meter-indicator flex items-center gap-1 px-2 py-1 rounded-xl bg-slate-800/80 border border-slate-700/50 ${
               isSpeaking ? 'speaking ring-1 ring-emerald-500/40' : ''
             }`}
           >
@@ -178,21 +175,19 @@ export default function BottomToolbar({
             </div>
 
             {/* Readout */}
-            <span className="text-[11px] font-mono font-semibold text-slate-300 min-w-[42px] text-right">
+            <span className="text-[10px] font-mono font-semibold text-slate-300 min-w-[38px] text-right">
               {displayDb}
             </span>
           </div>
-        </motion.div>
+        </div>
+
+        {/* Divider */}
+        <div className="h-6 w-px bg-slate-700/60 mx-0.5 hidden sm:block" />
 
         {/* =========================================================================
             CLUSTER 2: MAIN AV CONTROLS (CENTER)
             ========================================================================= */}
-        <motion.div
-          initial={{ y: 24, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.35 }}
-          className="pointer-events-auto flex items-center gap-2 px-3 py-2 rounded-2xl bg-slate-900/85 backdrop-blur-md border border-slate-700/60 text-slate-100 shadow-2xl"
-        >
+        <div className="flex items-center gap-1.5 px-1 py-1">
           {/* Mic Toggle Button */}
           <button
             type="button"
@@ -327,17 +322,15 @@ export default function BottomToolbar({
               )}
             </AnimatePresence>
           </div>
-        </motion.div>
+        </div>
+
+        {/* Divider */}
+        <div className="h-6 w-px bg-slate-700/60 mx-0.5 hidden sm:block" />
 
         {/* =========================================================================
             CLUSTER 3: VIEWPORT & ZOOM CONTROLS (RIGHT)
             ========================================================================= */}
-        <motion.div
-          initial={{ y: 24, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.4 }}
-          className="pointer-events-auto flex items-center gap-1.5 px-2.5 py-2 rounded-2xl bg-slate-900/85 backdrop-blur-md border border-slate-700/60 text-slate-100 shadow-2xl"
-        >
+        <div className="flex items-center gap-1 px-1 py-1">
           {/* Mini-map Toggle (Radar Icon) */}
           <button
             type="button"
@@ -416,9 +409,9 @@ export default function BottomToolbar({
           >
             {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
           </button>
-        </motion.div>
+        </div>
 
-      </div>
+      </motion.div>
     </div>
   );
 }

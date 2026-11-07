@@ -220,7 +220,7 @@ export class OfficeRenderer {
 
       // Acoustic Boardroom Tag Pill
       if (zone.id === 'boardroom') {
-        const pillW = 246 * this.scale;
+        const pillW = 150 * this.scale;
         const pillH = 22 * this.scale;
         const pillX = zx + zw - pillW - 14 * this.scale;
         const pillY = zy + 12 * this.scale;
@@ -236,7 +236,7 @@ export class OfficeRenderer {
         ctx.font = `700 ${Math.max(8, 9 * this.scale)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('Acoustic Boardroom (Dampened -12dB • 3.4m)', pillX + pillW / 2, pillY + pillH / 2);
+        ctx.fillText('Acoustic Boardroom', pillX + pillW / 2, pillY + pillH / 2);
       }
 
       // Townhall & Broadcast Stage Tag Pill
@@ -258,27 +258,6 @@ export class OfficeRenderer {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText('📡 Broadcast Stage', pillX + pillW / 2, pillY + pillH / 2);
-      }
-
-      // Lounge Espresso Bar Marker Pill
-      if (zone.id === 'lounge') {
-        const pillW = 110 * this.scale;
-        const pillH = 22 * this.scale;
-        const pillX = zx + zw - pillW - 14 * this.scale;
-        const pillY = zy + 12 * this.scale;
-        ctx.fillStyle = 'rgba(249, 115, 22, 0.14)';
-        ctx.beginPath();
-        ctx.roundRect(pillX, pillY, pillW, pillH, 11 * this.scale);
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(249, 115, 22, 0.5)';
-        ctx.lineWidth = 1.2 * this.scale;
-        ctx.stroke();
-
-        ctx.fillStyle = '#c2410c';
-        ctx.font = `700 ${Math.max(8, 9 * this.scale)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('☕ Espresso Bar', pillX + pillW / 2, pillY + pillH / 2);
       }
 
       ctx.restore();
@@ -351,12 +330,24 @@ export class OfficeRenderer {
         ctx.setLineDash([]);
       }
 
-      // Acoustic rating badge on wall
-      if (wall.dampeningDb) {
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.7)';
-        ctx.font = `600 ${Math.max(7, 8 * this.scale)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+      // Acoustic rating badge on wall (rendered cleanly in a high-contrast pill if telemetry/debug enabled)
+      if (this.spatialConfig?.showAcousticDebug && wall.dampeningDb) {
+        const badgeText = `Glass ${wall.dampeningDb}dB`;
+        ctx.font = `600 ${Math.max(9, 10 * this.scale)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+        const textWidth = ctx.measureText(badgeText).width;
+        const bw = textWidth + 10 * this.scale;
+        const bh = 16 * this.scale;
+        const by = midY - 14 * this.scale;
+
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+        ctx.beginPath();
+        ctx.roundRect(midX - bw / 2, by - bh / 2, bw, bh, 4 * this.scale);
+        ctx.fill();
+
+        ctx.fillStyle = '#38bdf8';
         ctx.textAlign = 'center';
-        ctx.fillText(`Glass ${wall.dampeningDb}dB`, midX, midY - 8 * this.scale);
+        ctx.textBaseline = 'middle';
+        ctx.fillText(badgeText, midX, by);
       }
 
       ctx.restore();
@@ -564,11 +555,25 @@ export class OfficeRenderer {
       ctx.lineTo(chX + chR - 1 * this.scale, chY + 4 * this.scale);
       ctx.stroke();
 
-      // Desk occupancy & label
-      ctx.fillStyle = 'rgba(100, 116, 139, 0.8)';
-      ctx.font = `600 ${Math.max(7, 8 * this.scale)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+      // Desk occupancy & label - High-contrast readable station badge
+      const labelFontSize = Math.max(9, 10 * this.scale);
+      ctx.font = `600 ${labelFontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+      const labelY = dy + (desk.orientation === 'south' ? 16 : -16) * this.scale;
+      const textW = ctx.measureText(desk.label).width;
+
+      // Soft white high-contrast backing pill for wayfinding legibility
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
+      ctx.beginPath();
+      ctx.roundRect(dx - textW / 2 - 4 * this.scale, labelY - labelFontSize / 2 - 2 * this.scale, textW + 8 * this.scale, labelFontSize + 4 * this.scale, 4 * this.scale);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(203, 213, 225, 0.9)';
+      ctx.lineWidth = 0.8 * this.scale;
+      ctx.stroke();
+
+      ctx.fillStyle = '#0f172a';
       ctx.textAlign = 'center';
-      ctx.fillText(desk.label, dx, dy + (desk.orientation === 'south' ? 14 : -14) * this.scale);
+      ctx.textBaseline = 'middle';
+      ctx.fillText(desk.label, dx, labelY);
 
       ctx.restore();
     }
@@ -944,29 +949,21 @@ export class OfficeRenderer {
     const isSpeaking = Boolean(user.isSpeaking);
 
     ctx.save();
-    const ringRadii = [48 * this.scale, 86 * this.scale, 134 * this.scale];
-    ctx.setLineDash([3 * this.scale, 4 * this.scale]);
+    // Simplified single subtle visual treatment to prevent visual clutter
+    const radius = 86 * this.scale;
+    ctx.beginPath();
+    ctx.arc(sx, sy, radius, 0, Math.PI * 2);
+    ctx.lineWidth = 1 * this.scale;
 
-    ringRadii.forEach((r, idx) => {
-      ctx.beginPath();
-      ctx.arc(sx, sy, r, 0, Math.PI * 2);
-      ctx.lineWidth = (1.2 - idx * 0.2) * this.scale;
-      if (isSpeaking) {
-        // Neon mint / cyan glowing faint dashed audio rings
-        ctx.strokeStyle = idx === 0
-          ? 'rgba(16, 185, 129, 0.45)'
-          : idx === 1
-          ? 'rgba(6, 182, 212, 0.32)'
-          : 'rgba(139, 92, 246, 0.22)';
-      } else {
-        ctx.strokeStyle = idx === 0
-          ? 'rgba(100, 116, 139, 0.26)'
-          : idx === 1
-          ? 'rgba(148, 163, 184, 0.18)'
-          : 'rgba(203, 213, 225, 0.12)';
-      }
+    if (isSpeaking) {
+      ctx.strokeStyle = 'rgba(16, 185, 129, 0.35)';
       ctx.stroke();
-    });
+    } else {
+      ctx.setLineDash([4 * this.scale, 4 * this.scale]);
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.16)';
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
 
     ctx.restore();
   }
